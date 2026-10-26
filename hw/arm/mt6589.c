@@ -633,8 +633,8 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * because it does not fail loudly - the reads simply land in the catch-all and
      * return 0, so the preloader's own data area reads as zeroes.
      */
-    memory_region_add_subregion_overlap(get_system_memory(), MT6589_PRERAM_BASE,
-                                        &s->preram, 1);
+    memory_region_add_subregion(get_system_memory(), MT6589_PRERAM_BASE,
+                                &s->preram);
     /* Mapped before the catch-all, which is added with a negative priority so
      * this wins. */
     memory_region_add_subregion(get_system_memory(), MT6589_SEJ_BASE,
@@ -661,9 +661,20 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * places below the modem cores at 0xA000_0000.
      */
     memory_region_init_io(&s->peri_iomem, OBJECT(s), &mt6589_peri_ops, s,
-                          "mt6589.peri", 0x08000000);
+                          "mt6589.peri", MT6589_PRERAM_BASE - 0x10000000);
+    /*
+     * Two subregions rather than one, so the preloader's SRAM at 0x1200_0000 is
+     * not covered. With a single 0x1000_0000..0x17FF_FFFF region the SRAM was
+     * shadowed even at overlap priority 1 - the reads landed in the catch-all and
+     * returned 0, with a log line to say so, so LK's own data area read as zeroes
+     * while it looked like ordinary unimplemented-register noise.
+     */
     memory_region_add_subregion_overlap(get_system_memory(), 0x10000000,
                                         &s->peri_iomem, -1);
+    memory_region_init_io(&s->peri_iomem_hi, OBJECT(s), &mt6589_peri_ops, s,
+                          "mt6589.peri.hi", 0x18000000 - MT6589_PRERAM_END);
+    memory_region_add_subregion_overlap(
+        get_system_memory(), MT6589_PRERAM_END, &s->peri_iomem_hi, -1);
 }
 
 /*

@@ -72,6 +72,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  */
 #define MT6589_PRERAM_BASE      0x12000000
 #define MT6589_PRERAM_SIZE      0x00200000
+#define MT6589_PRERAM_END       (MT6589_PRERAM_BASE + MT6589_PRERAM_SIZE)
 #define MT6589_PRELOADER_LOAD   0x12000D00
 #define MT6589_PRELOADER_ENTRY  0x12001000
 
@@ -270,6 +271,7 @@ struct Mt6589State {
     MemoryRegion sram;
     MemoryRegion sramboot;
     MemoryRegion preram;
+    MemoryRegion peri_iomem_hi;
     MemoryRegion bootrom;
 
     /* SEJ. Interface read off the boot ROM (see the constants above); the
