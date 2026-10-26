@@ -97,8 +97,17 @@
 #define SDC_RESP1     0x44
 #define SDC_RESP2     0x48
 #define SDC_RESP3     0x4c
-#define SDC_BLK_NUM   0x58
-#define SDC_BLK_SZ    0x5c
+/*
+ * SDC_BLK_NUM is 0x50, not 0x58 - the datasheet puts SDC_BLK_NUM at 0x50,
+ * SDC_CSTS at 0x58 and SDC_CSTS_EN at 0x5c. An earlier version of this file had
+ * 0x58/0x5c, which silently aliased the block count onto the card-status register:
+ * the guest's block count writes landed nowhere and reads of card status returned
+ * a count.
+ */
+#define SDC_BLK_NUM   0x50
+#define SDC_CSTS      0x58
+#define SDC_CSTS_EN   0x5c
+#define MSDC_BLK_SZ   0x54
 #define EMMC_CFG0     0x70
 #define EMMC_CFG1     0x74
 #define EMMC_STS      0x78
@@ -239,7 +248,8 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     case SDC_RESP2:   return s->sdc_resp[2];
     case SDC_RESP3:   return s->sdc_resp[3];
     case SDC_BLK_NUM: return s->sdc_blk_num;
-    case SDC_BLK_SZ:  return s->sdc_blk_sz;
+    case MSDC_BLK_SZ: return s->sdc_blk_sz;
+    case SDC_CSTS:    return 0;   /* not in a card-status transfer */
     case EMMC_CFG0:   return s->emmc_cfg0;
     case EMMC_CFG1:   return s->emmc_cfg1;
     case EMMC_STS:    return s->emmc_sts;
@@ -292,7 +302,7 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
     case SDC_BLK_NUM:
         s->sdc_blk_num = value;
         return;
-    case SDC_BLK_SZ:
+    case MSDC_BLK_SZ:
         s->sdc_blk_sz = value;
         return;
     case EMMC_CFG0:
