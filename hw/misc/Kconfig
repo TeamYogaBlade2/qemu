@@ -271,3 +271,7 @@ source macio/Kconfig
 config MT6589_NFI
     bool
     default y
+
+config MT6589_TOPRGU
+    bool
+    default y

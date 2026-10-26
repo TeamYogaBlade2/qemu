@@ -24,6 +24,7 @@
 #include "hw/arm/mt6589-regs/mt6589-apxgpt-regs.h"
 #include "hw/sd/mt6589_msdc.h"
 #include "hw/misc/mt6589_nfi.h"
+#include "hw/misc/mt6589_toprgu.h"
 #include "qom/object.h"
 #include "qemu/timer.h"
 
@@ -197,6 +198,7 @@ struct Mt6589State {
     SerialMM *uart[MT6589_NUM_UARTS];
     Mt6589MsdcState *msdc[MT6589_NUM_MSDC];
     Mt6589NfiState *nfi;
+    Mt6589ToprguState *toprgu;
 
     MemoryRegion sram;
     MemoryRegion sramboot;

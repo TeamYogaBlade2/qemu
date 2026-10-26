@@ -487,6 +487,21 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     qdev_realize(DEVICE(s->nfi), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->nfi), 0, MT6589_NFI_BASE);
 
+    /*
+     * TOPRGU at 0x10000000. Its WDT_STA is the boot reason the guest branches
+     * on, so it must be modelled rather than left to the catch-all: reading 0
+     * there is correct by accident, but a WDT_MODE write being dropped would be
+     * a silent difference from hardware.
+     *
+     * Note the address: 0x1000_7000 is TOPRGU on several other MediaTek SoCs and
+     * is RESERVED on MT6589. The datasheet map, the preloader's mt_reg_base.h
+     * and the kernel dtsi all say 0x1000_0000.
+     */
+    s->toprgu = MT6589_TOPRGU(object_new(TYPE_MT6589_TOPRGU));
+    object_property_add_child(OBJECT(s), "toprgu", OBJECT(s->toprgu));
+    qdev_realize(DEVICE(s->toprgu), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->toprgu), 0, MT6589_TOPRGU_BASE);
+
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
                        qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ));
