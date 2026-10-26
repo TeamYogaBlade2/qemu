@@ -39,6 +39,9 @@ struct Mt6589MsdcState {
     uint32_t sdc_blk_sz;
 
     bool card_idle;
+    uint32_t emmc_cfg0;
+    uint32_t emmc_cfg1;
+    uint32_t emmc_sts;
     /* For logging: which slot this is, so a command trace can be attributed. */
     char name[8];
 };

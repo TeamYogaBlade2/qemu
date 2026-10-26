@@ -99,6 +99,31 @@
 #define SDC_RESP3     0x4c
 #define SDC_BLK_NUM   0x58
 #define SDC_BLK_SZ    0x5c
+#define EMMC_CFG0     0x70
+#define EMMC_CFG1     0x74
+#define EMMC_STS      0x78
+
+/*
+ * EMMC_CFG0/STS. The boot ROM's last action before halting is to start the eMMC
+ * boot mode and wait for the result:
+ *
+ *   0x244a  ldr.w r5, [r8, #0x78]     ; r8 = 0x11230000, so EMMC_STS
+ *   0x244e  tst.w r5, r9              ; r9 = 0x6e
+ *   0x2452  beq   0x2458              ; count down r4 and retry
+ *
+ * 0x6e is BTDRCV|BTARCV|BTATO|BTDTO - "boot data received, ack received, or an
+ * ack/data timeout". Any of them ends the wait, and the ACK/data-received bits are
+ * what a card that answered produces.
+ */
+#define EMMC_CFG0_BTSTART (1u << 0)
+#define EMMC_CFG0_BTSTOP  (1u << 1)
+#define EMMC_STS_BTDERR   (1u << 0)
+#define EMMC_STS_BTAERR   (1u << 1)
+#define EMMC_STS_BTDTO    (1u << 2)
+#define EMMC_STS_BTATO    (1u << 3)
+#define EMMC_STS_BTSTS    (1u << 4)
+#define EMMC_STS_BTARCV   (1u << 5)
+#define EMMC_STS_BTDRCV   (1u << 6)
 
 /* A card that is present but has no backing image: identification succeeds and
  * any data transfer reads zeroes. Enough for the boot path to choose a device;
@@ -215,6 +240,9 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     case SDC_RESP3:   return s->sdc_resp[3];
     case SDC_BLK_NUM: return s->sdc_blk_num;
     case SDC_BLK_SZ:  return s->sdc_blk_sz;
+    case EMMC_CFG0:   return s->emmc_cfg0;
+    case EMMC_CFG1:   return s->emmc_cfg1;
+    case EMMC_STS:    return s->emmc_sts;
     case MSDC_RXDATA: return 0;
     }
     qemu_log_mask(LOG_UNIMP, "%s: read offset 0x%" HWADDR_PRIx "\n",
@@ -266,6 +294,26 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         return;
     case SDC_BLK_SZ:
         s->sdc_blk_sz = value;
+        return;
+    case EMMC_CFG0:
+        s->emmc_cfg0 = value;
+        if (value & EMMC_CFG0_BTSTART) {
+            /*
+             * eMMC boot mode started. Report ack and data received: there is a
+             * card behind this slot as far as the identification sequence is
+             * concerned, so boot mode must complete rather than time out. BTSTS
+             * is the "boot mode active" bit and is cleared on completion.
+             */
+            s->emmc_sts = EMMC_STS_BTARCV | EMMC_STS_BTDRCV;
+            s->emmc_cfg0 &= ~EMMC_CFG0_BTSTART;
+        }
+        if (value & EMMC_CFG0_BTSTOP) {
+            s->emmc_sts = 0;
+            s->emmc_cfg1 = 0;
+        }
+        return;
+    case EMMC_STS:
+        s->emmc_sts &= ~((uint32_t)value);
         return;
     case SDC_CMD:
         s->sdc_cmd = value;
