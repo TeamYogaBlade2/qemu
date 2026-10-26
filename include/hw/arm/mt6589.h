@@ -25,6 +25,7 @@
 #include "hw/sd/mt6589_msdc.h"
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
+#include "hw/misc/mt6589_efuse.h"
 #include "qom/object.h"
 #include "qemu/timer.h"
 
@@ -75,6 +76,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GPIO_BASE        0x10005000
 #define MT6589_SPM_BASE         0x10006000
 #define MT6589_GPT_BASE         0x10008000
+#define MT6589_EFUSE_BASE       0x10009000
 #define MT6589_PWRAP_BASE       0x1000F000
 /*
  * SEJ - Security Engine Junior, 0x1000_A000.
@@ -218,6 +220,7 @@ struct Mt6589State {
     Mt6589MsdcState *msdc[MT6589_NUM_MSDC];
     Mt6589NfiState *nfi;
     Mt6589ToprguState *toprgu;
+    Mt6589EfuseState *efuse;
 
     MemoryRegion sram;
     MemoryRegion sramboot;

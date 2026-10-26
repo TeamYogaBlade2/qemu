@@ -503,6 +503,17 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     qdev_realize(DEVICE(s->toprgu), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->toprgu), 0, MT6589_TOPRGU_BASE);
 
+    /*
+     * EFUSEC at 0x10009000 - a flat read-only window onto the fuse array rather
+     * than a register bank, carrying the real board's dump. Firmware reads fuses
+     * to decide what the hardware is, so invented contents produce a board that
+     * boots differently from the one being debugged.
+     */
+    s->efuse = MT6589_EFUSE(object_new(TYPE_MT6589_EFUSE));
+    object_property_add_child(OBJECT(s), "efuse", OBJECT(s->efuse));
+    qdev_realize(DEVICE(s->efuse), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->efuse), 0, MT6589_EFUSE_BASE);
+
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
                        qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ));

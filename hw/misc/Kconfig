@@ -275,3 +275,7 @@ config MT6589_NFI
 config MT6589_TOPRGU
     bool
     default y
+
+config MT6589_EFUSE
+    bool
+    default y
