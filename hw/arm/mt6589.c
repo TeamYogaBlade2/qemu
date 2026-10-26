@@ -32,6 +32,7 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
+#include "qemu/error-report.h"
 #include "qemu/module.h"
 #include "qemu/timer.h"
 #include "hw/arm/mt6589.h"
@@ -41,6 +42,7 @@
 #include "system/address-spaces.h"
 #include "system/memory.h"
 #include "system/system.h"
+#include "hw/core/loader.h"
 #include "qemu/units.h"
 
 /*
@@ -292,13 +294,20 @@ static const MemoryRegionOps mt6589_peri_ops = {
     .read = mt6589_peri_read,
     .write = mt6589_peri_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
+    /*
+     * 1-byte access must be allowed. The boot ROM probes registers with byte
+     * loads and stores (a single-byte read of 0x11006024 aborted with DFSR
+     * alignment fault when min_access_size was 4), and a Data Abort there sends
+     * the ROM to its abort vector, where it loops. Being permissive here costs
+     * nothing: the handler ignores the value anyway.
+     */
     .valid = {
-        .min_access_size = 4,
-        .max_access_size = 4,
+        .min_access_size = 1,
+        .max_access_size = 8,
     },
     .impl = {
-        .min_access_size = 4,
-        .max_access_size = 4,
+        .min_access_size = 1,
+        .max_access_size = 8,
     },
 };
 
@@ -318,6 +327,13 @@ static void mt6589_init(Object *obj)
      * before the guest starts rather than being created on first write. */
     memory_region_init_ram(&s->sram, OBJECT(s), "mt6589.sram", 0x40000,
                            &error_fatal);
+
+    /* The boot ROM window. Backed by RAM rather than ROM so the image can be
+     * loaded into it with -bios, and so a wrong write faults visibly rather than
+     * being silently ignored - but the region exists even when empty, because
+     * the BROM's own vectors must be readable from address 0. */
+    memory_region_init_ram(&s->bootrom, OBJECT(s), "mt6589.bootrom",
+                           MT6589_BOOTROM_SIZE, &error_fatal);
 }
 
 static void mt6589_realize(DeviceState *dev, Error **errp)
@@ -354,10 +370,16 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
         hwaddr base = MT6589_UART0_BASE + i * 0x1000;
         qemu_irq irq = qdev_get_gpio_in(s->gic, MT6589_UART_IRQ + i);
 
-        /* The UART is a plain 16550 at 0x1000 stride, which the datasheet's
-         * chapter 64 confirms; no MTK-specific register is documented. */
-        s->uart[i] = serial_mm_init(get_system_memory(), base,
-                                    MT6589_UART_REG_SHIFT, irq, 115200,
+        /*
+         * The UART is a plain 16550, but with a 4-byte register stride rather
+         * than a packed 8-byte window: the datasheet puts RBR at 0x00, IER at
+         * 0x04, IIR/FCR at 0x08, LCR at 0x0c and so on to SCR at 0x1c, so
+         * regshift must be 2. With regshift 0 serial_mm registers only eight
+         * bytes, every register above IER falls outside it, and the guest's very
+         * first LCR write (0x1100600c) raised a Data Abort - which the boot ROM
+         * answers by taking the abort vector and looping there.
+         */
+        s->uart[i] = serial_mm_init(get_system_memory(), base, 2, irq, 115200,
                                     serial_hd(i), DEVICE_LITTLE_ENDIAN);
     }
 
@@ -367,6 +389,8 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
 
     memory_region_add_subregion(get_system_memory(), MT6589_SRAM_BASE,
                                 &s->sram);
+    memory_region_add_subregion(get_system_memory(), MT6589_BOOTROM_BASE,
+                                &s->bootrom);
 
     /*
      * Catch-all for the infrastructure and peripheral windows. The datasheet
@@ -376,8 +400,20 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * present" and takes a different boot path. The specific models (GPT, UART)
      * are mapped as subregions of the same space and take priority.
      */
+    /*
+     * Size and start are chosen to cover every documented block, not just the
+     * infrastructure window: the boot ROM's first out-of-BROM access is a read
+     * of 0x1500_0188 (IMAGE system, datasheet Table 3-1 "0x1500_0000 16MB"), and
+     * with the region ending at 0x1500_0000 that access raised a Data Abort, so
+     * the ROM took the abort vector and looped there for ever.
+     *
+     * 0x1000_0000 .. 0x17FF_FFFF covers the infrastructure (0x1000_0000), the
+     * peripheral window (0x1100_0000), the multimedia window (0x1400_0000) and
+     * the image/camera window (0x1500_0000), which is everything the datasheet
+     * places below the modem cores at 0xA000_0000.
+     */
     memory_region_init_io(&s->peri_iomem, OBJECT(s), &mt6589_peri_ops, s,
-                          "mt6589.peri", 0x05000000);
+                          "mt6589.peri", 0x08000000);
     memory_region_add_subregion_overlap(get_system_memory(), 0x10000000,
                                         &s->peri_iomem, -1);
 }
@@ -408,7 +444,7 @@ static void mt6589_machine_init(MachineState *machine)
 {
     static struct arm_boot_info boot_info;
     Mt6589State *s;
-    int i;
+    const char *brom;
 
     assert(machine->ram_size <= 0x40000000);
 
@@ -423,23 +459,43 @@ static void mt6589_machine_init(MachineState *machine)
                                 machine->ram);
 
     /*
-     * The MT6589 has no U-Boot or Fastboot contract; the boot ROM reads the
-     * preloader from eMMC/NAND/UART and the chain continues from there. QEMU's
-     * -kernel on this board therefore means "load this as the first stage at
-     * the boot ROM's drop address" rather than a Linux zImage directly, and the
-     * image is expected to include whatever second stage it wants.
+     * The MT6589 does not boot a kernel. The boot ROM at address 0 reads the
+     * preloader from eMMC/NAND/UART, the preloader brings up DRAM, and LK loads
+     * whatever comes next. So:
+     *
+     *   -bios FILE    the boot ROM image, loaded at 0x0000_0000
+     *   -kernel FILE  the preloader, loaded at the DRAM base
+     *
+     * Both are needed for a faithful run, and loading the BROM with -kernel
+     * (which puts it at the DRAM base) makes it execute from an address it was
+     * never linked for. That mistake is worth recording: the BROM appeared to
+     * run, and only its failure to reach its own UART poll showed anything was
+     * wrong.
      */
+    brom = machine->firmware;
+    if (brom) {
+        /*
+         * rom_add_file_fixed, not load_image_size: the latter writes to a *host*
+         * pointer, so passing the guest address silently scribbles on this
+         * process's memory and leaves address 0 empty. The symptom is a BROM
+         * that appears to run - the entry point and vectors execute - and then
+         * walks into zeros, because only the first page's worth of code was
+         * ever legible.
+         */
+        if (rom_add_file_fixed(brom, MT6589_BOOTROM_BASE, -1) < 0) {
+            error_report("mt6589: could not load boot ROM '%s'", brom);
+            exit(1);
+        }
+    }
+
     boot_info = (struct arm_boot_info) {
         .loader_start = MT6589_DRAM_BASE,
         .kernel_filename = machine->kernel_filename,
         .ram_size = machine->ram_size,
         .board_id = -1,
+        .firmware_loaded = brom != NULL,
     };
     arm_load_kernel(s->cpu, machine, &boot_info);
-
-    for (i = 0; i < MT6589_NUM_UARTS; i++) {
-        /* nothing: serial_mm_init already wired the chardev */
-    }
 }
 
 static void mt6589_machine_class_init(MachineClass *mc)
@@ -450,6 +506,8 @@ static void mt6589_machine_class_init(MachineClass *mc)
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-a7");
     mc->default_ram_id = "mt6589.ram";
     mc->default_ram_size = 1024 * MiB;
+    /* Sets machine->firmware from -bios. */
+    mc->default_boot_order = NULL;
 }
 
 DEFINE_MACHINE("mt6589", mt6589_machine_class_init)

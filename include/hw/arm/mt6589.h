@@ -35,6 +35,14 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  * blocks in particular are incomplete in the datasheet summary. The reasoning
  * per block is in docs/qemu/addresses.md.
  */
+/*
+ * Boot ROM. Datasheet Table 3-1: 0x0000_0000..0x0000_FFFF is 64 KiB of on-chip
+ * boot ROM. The BROM executes from here, not from DRAM - loading it at the DRAM
+ * base makes it run from an address it was never linked for, which is why it
+ * appeared to execute but never reached its UART poll.
+ */
+#define MT6589_BOOTROM_BASE     0x00000000
+#define MT6589_BOOTROM_SIZE     0x00010000
 #define MT6589_SRAM_BASE        0x00100000
 #define MT6589_DRAM_BASE        0x80000000
 
@@ -129,6 +137,7 @@ struct Mt6589State {
     SerialMM *uart[MT6589_NUM_UARTS];
 
     MemoryRegion sram;
+    MemoryRegion bootrom;
     MemoryRegion peri_iomem;
 };
 
