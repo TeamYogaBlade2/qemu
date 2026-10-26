@@ -672,6 +672,18 @@ static void mt6589_machine_init(MachineState *machine)
 
     s = MT6589(object_new(TYPE_MT6589));
     object_property_add_child(OBJECT(machine), "soc", OBJECT(s));
+    /*
+     * Card image, from MT6589_CARD_IMAGE. The property lives on the SoC and the
+     * machine creates that SoC itself, so there is no -machine option to reach
+     * it with; an environment variable keeps the runner script in charge of it
+     * rather than adding a second way to configure the same thing.
+     */
+    {
+        const char *card = getenv("MT6589_CARD_IMAGE");
+        if (card && *card) {
+            object_property_set_str(OBJECT(s), "card-image", card, &error_fatal);
+        }
+    }
     /* A SysBusDevice must be realised on the system bus, not on NULL: the
      * machine has no bus of its own, and qdev asserts on a device whose class
      * declares a bus type being realised outside one. */
