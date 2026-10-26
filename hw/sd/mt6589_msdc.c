@@ -350,9 +350,20 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
          * this before every drain and a wrong field means it either spins waiting
          * for data that is already there or reads past the end.
          */
+        /*
+         * RXCNT is an 8-bit FIFO occupancy, not a count of everything still
+         * pending. Saturate at 0xff: the guest tests `FIFOCS & 0xff != 0` to mean
+         * "data available", so a total remaining of 65536 words reads as 0 and
+         * the drain loop exits immediately with nothing read.
+         */
         uint32_t words = (s->data_len > s->data_pos)
                        ? (s->data_len - s->data_pos + 3) / 4 : 0;
-        return (words & 0xff) << 0;
+        if (words > 0xff) {
+            words = 0xff;
+        }
+        qemu_log_mask(LOG_UNIMP, "%s: %s FIFOCS read -> rxcnt %u\n",
+                      __func__, s->name, words);
+        return words;
     }
     case SDC_CFG:     return s->sdc_cfg;
     case SDC_CMD:     return s->sdc_cmd;
@@ -367,7 +378,10 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     case SDC_CSTS:    return 0;   /* not in a card-status transfer */
     case EMMC_CFG0:   return s->emmc_cfg0;
     case EMMC_CFG1:   return s->emmc_cfg1;
-    case EMMC_STS:    return s->emmc_sts;
+    case EMMC_STS:
+        qemu_log_mask(LOG_UNIMP, "%s: %s EMMC_STS read -> 0x%08x\n",
+                      __func__, s->name, s->emmc_sts);
+        return s->emmc_sts;
     case MSDC_RXDATA: {
         /*
          * Drain four bytes at a time from whatever the data phase staged.
@@ -447,6 +461,8 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
          */
         uint32_t prev = s->emmc_cfg0;
         s->emmc_cfg0 = value;
+        qemu_log_mask(LOG_UNIMP, "%s: %s EMMC_CFG0 0x%08x -> 0x%08x\n",
+                      __func__, s->name, prev, (uint32_t)value);
         if ((value & EMMC_CFG0_BTSTART) && !(prev & EMMC_CFG0_BTSTART)) {
             /*
              * Stage the whole boot image, not one block. The guest's payload loader
@@ -459,11 +475,26 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
              * carry, so the preloader is served from the front of the card. That is
              * a decision about the modelled board, not a claim about the part.
              */
+            qemu_log_mask(LOG_UNIMP, "%s: %s BOOTSTART edge, image %s, len %zu\n",
+                          __func__, s->name, s->image ? "yes" : "no",
+                          s->image ? s->image_size : (size_t)0);
             s->data = s->image;
             s->data_len = s->image ? MIN(s->image_size, 0x40000) : 0;
             s->data_pos = 0;
+            /*
+             * BOOTUPSTATE (4) is what FUN_0000242c() classifies, but the data
+             * mover emmc_boot_read_blocks() waits on `EMMC_STS & 5` - bits 0 and
+             * 2, i.e. BTDERR/BTDTO. It also needs RXCNT non-zero in FIFOCS, which
+             * the staged buffer provides.
+             *
+             * Note this must survive the write-1-to-clear in FUN_0000242c, which
+             * writes the status word back after classifying it. That function is
+             * called before the first read, so a status cleared there has to be
+             * re-established by the time the reader polls - which is why the
+             * completion bits are set here rather than only on a separate event.
+             */
             s->emmc_sts = EMMC_STS_BOOTUPSTATE | EMMC_STS_BTARCV |
-                          EMMC_STS_BTDRCV;
+                          EMMC_STS_BTDRCV | EMMC_STS_BTDERR;
             s->int_status |= MSDC_INT_XFER_COMPL;
             mt6589_msdc_update_irq(s);
         }
