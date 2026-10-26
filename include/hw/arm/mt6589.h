@@ -26,6 +26,7 @@
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
 #include "hw/misc/mt6589_efuse.h"
+#include "hw/display/mt6589_disp.h"
 #include "qom/object.h"
 #include "qemu/timer.h"
 

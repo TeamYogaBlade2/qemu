@@ -431,7 +431,12 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      */
     s->gic = qdev_new(TYPE_ARM_GIC);
     qdev_prop_set_uint32(s->gic, "num-cpu", 1);
-    qdev_prop_set_uint32(s->gic, "num-irq", 160);
+        /*
+     * The GIC needs at least 204 SPIs: the display blocks sit above 160
+     * (mt6589.dtsi puts OVL at GIC_SPI 163), and qdev asserts rather than
+     * truncating when a peripheral asks for a line past the end.
+     */
+    qdev_prop_set_uint32(s->gic, "num-irq", 224);
     qdev_prop_set_uint32(s->gic, "revision", 2);
     qdev_realize(s->gic, sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gic), 0, MT6589_GIC_DIST_BASE);
@@ -522,6 +527,9 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     object_property_add_child(OBJECT(s), "efuse", OBJECT(s->efuse));
     qdev_realize(DEVICE(s->efuse), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->efuse), 0, MT6589_EFUSE_BASE);
+
+    /* Display subsystem: OVL, RDMA, COLOR, MUTEX. */
+    mt6589_disp_create(s, s->gic);
 
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
