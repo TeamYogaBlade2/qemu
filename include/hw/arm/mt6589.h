@@ -21,6 +21,7 @@
 #include "hw/arm/boot.h"
 #include "hw/char/serial-mm.h"
 #include "hw/intc/arm_gic.h"
+#include "hw/arm/mt6589-regs/mt6589-apxgpt-regs.h"
 #include "qom/object.h"
 #include "qemu/timer.h"
 
