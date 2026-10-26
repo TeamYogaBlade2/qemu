@@ -505,7 +505,22 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         }
         return;
     case EMMC_STS:
+        /*
+         * Write-1-to-clear, as the hardware does - but the boot-mode completion
+         * bits must stay asserted while a transfer is still in progress, because
+         * emmc_boot_read_blocks waits on `EMMC_STS & 5` (BTDERR/BTDTO) as one of
+         * its two liveness conditions. The ROM's own FUN_0000242c writes the
+         * status word back after classifying it, which would clear exactly the
+         * bits the reader then needs.
+         *
+         * Keeping BOOTUPSTATE while data remains staged is the behaviour that
+         * makes the drain loop terminate on the data running out rather than on a
+         * status timeout.
+         */
         s->emmc_sts &= ~((uint32_t)value);
+        if (s->data && s->data_pos < s->data_len) {
+            s->emmc_sts |= EMMC_STS_BOOTUPSTATE;
+        }
         return;
     case SDC_CMD:
         s->sdc_cmd = value;
