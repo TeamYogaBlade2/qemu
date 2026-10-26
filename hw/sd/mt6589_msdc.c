@@ -161,6 +161,13 @@
 #define EMMC_STS_BTSTS    (1u << 4)
 #define EMMC_STS_BTARCV   (1u << 5)
 #define EMMC_STS_BTDRCV   (1u << 6)
+/*
+ * How much the boot area fetch delivers. eMMC boot partitions are 128 KiB or 64
+ * KiB depending on the part; the FIFO here is 2 KiB, so this is a chunk size rather
+ * than the whole area - the guest reads it out and, if it wants more, issues further
+ * transfers. Sized to one block so the ROM's first read sees a complete block.
+ */
+#define BOOT_AREA_DEFAULT 512
 
 /* A card that is present but has no backing image: identification succeeds and
  * any data transfer reads zeroes. Enough for the boot path to choose a device;
@@ -406,11 +413,26 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         s->emmc_cfg0 = value;
         if (value & EMMC_CFG0_BTSTART) {
             /*
-             * eMMC boot mode started. Report ack and data received: there is a
-             * card behind this slot as far as the identification sequence is
-             * concerned, so boot mode must complete rather than time out. BTSTS
-             * is the "boot mode active" bit and is cleared on completion.
+             * eMMC boot mode: the controller fetches the boot area itself over the
+             * card's boot protocol and drops it in the FIFO, so this is a DATA path,
+             * not just a status bit. Reporting "ack and data received" without
+             * filling the FIFO makes the ROM read zeroes and decide the boot area is
+             * empty - which is what it was doing before this filled the buffer.
+             *
+             * The boot area is the start of the card image, which is how a real
+             * card's boot partition is laid out.
              */
+            uint32_t len = s->boot_area_len ? s->boot_area_len : BOOT_AREA_DEFAULT;
+            if (len > sizeof(s->fifo)) {
+                len = sizeof(s->fifo);
+            }
+            memset(s->fifo, 0, sizeof(s->fifo));
+            s->fifo_len = len;
+            s->fifo_pos = 0;
+            if (s->image && s->image_size) {
+                uint32_t avail = (s->image_size < len) ? s->image_size : len;
+                memcpy(s->fifo, s->image, avail);
+            }
             s->emmc_sts = EMMC_STS_BTARCV | EMMC_STS_BTDRCV;
             s->emmc_cfg0 &= ~EMMC_CFG0_BTSTART;
         }

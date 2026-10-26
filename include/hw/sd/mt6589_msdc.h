@@ -42,6 +42,8 @@ struct Mt6589MsdcState {
     uint32_t emmc_cfg0;
     uint32_t emmc_cfg1;
     uint32_t emmc_sts;
+    /* Bytes the boot-area fetch delivers; 0 means BOOT_AREA_DEFAULT. */
+    uint32_t boot_area_len;
 
     /* Read FIFO, drained by MSDC_RXDATA. Sized for four 512-byte blocks. */
     uint8_t fifo[2048];
