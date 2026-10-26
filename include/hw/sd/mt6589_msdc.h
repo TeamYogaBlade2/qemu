@@ -42,6 +42,17 @@ struct Mt6589MsdcState {
     uint32_t emmc_cfg0;
     uint32_t emmc_cfg1;
     uint32_t emmc_sts;
+    /*
+     * Register file for the pad/delay tuning registers. LK writes these and then
+     * reads them back in a settle loop, so they have to hold their value - a
+     * constant 0 makes the loop run for ever.
+     */
+    uint32_t pad_ctl0, pad_ctl1, pad_ctl2, pad_tune;
+    uint32_t dma_sa;      /* GPD descriptor address */
+    uint32_t dma_ctrl;
+    uint32_t dma_cfg;
+    uint32_t dat_rddly0, dat_rddly1;
+
     /* Bytes the boot-area fetch delivers; 0 means BOOT_AREA_DEFAULT. */
     uint32_t boot_area_len;
 

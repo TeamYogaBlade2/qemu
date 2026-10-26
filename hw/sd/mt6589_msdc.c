@@ -41,6 +41,7 @@
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
+#include "system/dma.h"
 
 /* MSDC_CFG */
 #define MSDC_CFG_MODE       (1u << 0)
@@ -74,6 +75,27 @@
 #define MSDC_INT_DXFER_DONE   (1u << 13)
 #define MSDC_INT_DATTMO       (1u << 14)
 #define MSDC_INT_DATCRCERR    (1u << 15)
+
+/*
+ * Pad/delay tuning registers. LK programs these and reads them back to confirm
+ * the write landed; the values have no behavioural effect here because there is
+ * no real PHY to tune, but they must not read as a constant or the settle loop
+ * never ends. Offsets from lk/include/platform/msdc.h.
+ */
+#define MSDC_PAD_CTL0        0x00e0
+#define MSDC_PAD_CTL1        0x00e4
+#define MSDC_PAD_CTL2        0x00e8
+#define MSDC_PAD_TUNE        0x00ec
+#define MSDC_DAT_RDDLY0      0x00f0
+#define MSDC_DAT_RDDLY1      0x00f4
+
+/* DMA registers, from lk/include/platform/msdc.h. */
+#define MSDC_DMA_SA          0x0090
+#define MSDC_DMA_CA          0x0094
+#define MSDC_DMA_CTRL        0x0098
+#define MSDC_DMA_CFG         0x009c
+#define MSDC_DMA_CTRL_START  (1u << 0)
+#define MSDC_DMA_CTRL_STOP   (1u << 1)
 
 /* MSDC_FIFOCS */
 #define MSDC_FIFOCS_TXCNT     (0xfu << 0)
@@ -222,6 +244,61 @@ static void mt6589_msdc_update_irq(Mt6589MsdcState *s)
  * no image is loaded the buffer stays zero, and the transfer still completes - a
  * card that is present but blank.
  */
+/*
+ * DMA. LK programs a GPD descriptor (lk/include/platform/msdc.h) whose address it
+ * puts in MSDC_DMA_SA, then sets DMA_CTRL_START and waits for the transfer to
+ * finish. Without a DMA path the staged data sits in the FIFO for ever while
+ * FIFOCS keeps reporting it - which is what a 149,142-iteration FIFOCS poll with
+ * rxcnt 255 was: the guest waiting for a transfer that had already "happened" as
+ * far as the FIFO was concerned.
+ *
+ * The descriptor layout (gpd_t) is:
+ *
+ *   u32 hwo:1, bdp:1, rsv0:6, chksum:8, intr:1, rsv1:15;
+ *   void *next;      // +0x04
+ *   void *ptr;       // +0x08  destination
+ *   u32 buflen:16, extlen:8, rsv2:8;   // +0x0c
+ *
+ * Only the fields this needs are decoded, and only a single descriptor - the
+ * guests here use one per block transfer.
+ */
+static void mt6589_msdc_dma_run(Mt6589MsdcState *s)
+{
+    uint8_t desc[16];
+    uint32_t gpd = s->dma_sa;
+    uint32_t ptr, buflen;
+
+    if (!gpd || !s->data || s->data_pos >= s->data_total) {
+        return;
+    }
+
+    if (dma_memory_read(&address_space_memory, gpd, desc, sizeof(desc),
+                        MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
+        return;
+    }
+    ptr = (uint32_t)ldl_le_p(desc + 8);
+    buflen = (uint32_t)lduw_le_p(desc + 12) & 0xffff;
+    if (!ptr || !buflen) {
+        return;
+    }
+
+    uint32_t avail = s->data_total - s->data_pos;
+    uint32_t n = MIN(buflen, avail);
+    dma_memory_write(&address_space_memory, ptr, s->data + s->data_pos, n,
+                     MEMTXATTRS_UNSPECIFIED);
+    s->data_pos += n;
+    s->data_len = s->data_pos;
+
+    /* Consumed: the FIFO must not keep offering it. */
+    s->data = NULL;
+    s->data_total = 0;
+    s->data_len = 0;
+    s->data_pos = 0;
+
+    s->int_status |= MSDC_INT_XFER_COMPL;
+    mt6589_msdc_update_irq(s);
+}
+
 static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
 {
     uint32_t block_size = s->sdc_blk_sz ? s->sdc_blk_sz : 512;
@@ -460,6 +537,15 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     case SDC_BLK_NUM: return s->sdc_blk_num;
     case MSDC_BLK_SZ: return s->sdc_blk_sz;
     case SDC_CSTS:    return 0;   /* not in a card-status transfer */
+    case MSDC_PAD_CTL0:  return s->pad_ctl0;
+    case MSDC_PAD_CTL1:  return s->pad_ctl1;
+    case MSDC_PAD_CTL2:  return s->pad_ctl2;
+    case MSDC_PAD_TUNE:  return s->pad_tune;
+    case MSDC_DAT_RDDLY0: return s->dat_rddly0;
+    case MSDC_DAT_RDDLY1: return s->dat_rddly1;
+    case MSDC_DMA_SA:     return s->dma_sa;
+    case MSDC_DMA_CTRL:   return s->dma_ctrl;
+    case MSDC_DMA_CFG:    return s->dma_cfg;
     case EMMC_CFG0:   return s->emmc_cfg0;
     case EMMC_CFG1:   return s->emmc_cfg1;
     case EMMC_STS:
@@ -520,6 +606,42 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         /* Write 1 to clear. */
         s->int_status &= ~((uint32_t)value);
         mt6589_msdc_update_irq(s);
+        return;
+    case MSDC_PAD_CTL0:
+        s->pad_ctl0 = value;
+        return;
+    case MSDC_PAD_CTL1:
+        s->pad_ctl1 = value;
+        return;
+    case MSDC_PAD_CTL2:
+        s->pad_ctl2 = value;
+        return;
+    case MSDC_PAD_TUNE:
+        s->pad_tune = value;
+        return;
+    case MSDC_DMA_SA:
+        s->dma_sa = value;
+        return;
+    case MSDC_DMA_CFG:
+        s->dma_cfg = value;
+        return;
+    case MSDC_DMA_CTRL:
+        /*
+         * START is a trigger, not a state: it reads back clear once the transfer
+         * has run. STOP only drops the setting.
+         */
+        if (value & MSDC_DMA_CTRL_START) {
+            mt6589_msdc_dma_run(s);
+            s->dma_ctrl = value & ~MSDC_DMA_CTRL_START;
+        } else {
+            s->dma_ctrl = value & ~MSDC_DMA_CTRL_START;
+        }
+        return;
+    case MSDC_DAT_RDDLY0:
+        s->dat_rddly0 = value;
+        return;
+    case MSDC_DAT_RDDLY1:
+        s->dat_rddly1 = value;
         return;
     case MSDC_INTEN:
         s->int_enable = value;
