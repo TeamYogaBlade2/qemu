@@ -22,13 +22,18 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589DramcState, MT6589_DRAMC)
  */
 #define MT6589_DRAMC_SIZE 0x1000
 
+/* The DMA window the DLE calibration's memory-to-memory test drives. */
+#define MT6589_DMA_SIZE 0x1000
+
 struct Mt6589DramcState {
     /*< private >*/
     SysBusDevice parent_obj;
 
     /*< public >*/
     MemoryRegion iomem;
+    MemoryRegion dma_iomem;
     uint32_t reg[MT6589_DRAMC_SIZE / 4];
+    uint32_t dma_reg[MT6589_DMA_SIZE / 4];
 };
 
 #endif /* HW_MISC_MT6589_DRAMC_H */

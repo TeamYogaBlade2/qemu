@@ -109,6 +109,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  */
 #define MT6589_DDRPHY_BASE      0x10011000
 #define MT6589_DDRPHY_SIZE      0x1000
+
+/* System DMA, datasheet Table 3-1. */
+#define MT6589_DMA_BASE         0x11000000
 #define MT6589_GPIO_BASE        0x10005000
 #define MT6589_SPM_BASE         0x10006000
 #define MT6589_GPT_BASE         0x10008000

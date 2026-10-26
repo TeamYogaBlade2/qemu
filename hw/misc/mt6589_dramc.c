@@ -37,6 +37,7 @@
 #include "hw/arm/mt6589.h"
 #include "hw/core/irq.h"
 #include "system/memory.h"
+#include "system/dma.h"
 
 /* Registers with meaning. Everything else is a plain latch. */
 #define DRAMC_CONF1       0x004
@@ -46,6 +47,7 @@
 #define DRAMC_R0DQSIEN    0x094
 #define DRAMC_TESTRPT     0x3fc
 #define DRAMC_SPCMDRESP   0x3b8
+#define DRAMC_RRRATE_CTL  0x1f4
 #define DRAMC_DQSGCTL     0x124
 #define DRAMC_DQSCTL1     0x0e0
 #define DRAMC_DQSGNWCNT0  0x3c0
@@ -82,6 +84,92 @@ static bool mt6589_dramc_window_ok(Mt6589DramcState *s)
     return coarse >= 13 && coarse <= 16;
 }
 
+/*
+ * The DMA window at 0x1100_0000 (datasheet Table 3-1: "0x1100_0000 4KB DMA").
+ * It lives next to DRAMC rather than in its own device because the only user in
+ * the boot chain is the DLE calibration's memory-to-memory test, and that test is
+ * the thing this window has to satisfy.
+ *
+ * dramc_dma_test() in dramc_dle_cal.c:
+ *
+ *     0x98 = 0x00070000        burst length
+ *     0x9c = src               source address
+ *     0xa0 = dst               destination address
+ *     0xa4 = len               byte count
+ *     0x88 = 0x1               start
+ *     while (*(0x88));         wait for completion
+ *
+ * then it walks the destination and requires dst[i] == i. With the window
+ * unimplemented the start bit never clears, so the calibration hangs; had it
+ * cleared, the copy would not have happened and the comparison would fail
+ * instead. The copy is therefore genuinely performed rather than faked by
+ * clearing the bit.
+ */
+#define DMA_START   0x088
+#define DMA_BURST   0x098
+#define DMA_SRC     0x09c
+#define DMA_DST     0x0a0
+#define DMA_LEN     0x0a4
+
+static void mt6589_dramc_dma_run(Mt6589DramcState *s)
+{
+    uint32_t src = s->dma_reg[DMA_SRC / 4];
+    uint32_t dst = s->dma_reg[DMA_DST / 4];
+    uint32_t len = s->dma_reg[DMA_LEN / 4];
+    uint8_t buf[64];
+
+    while (len) {
+        uint32_t n = MIN(len, (uint32_t)sizeof(buf));
+
+        if (dma_memory_read(&address_space_memory, src, buf, n,
+                            MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
+            break;
+        }
+        dma_memory_write(&address_space_memory, dst, buf, n,
+                         MEMTXATTRS_UNSPECIFIED);
+        src += n;
+        dst += n;
+        len -= n;
+    }
+}
+
+static uint64_t mt6589_dramc_dma_read(void *opaque, hwaddr offset, unsigned size)
+{
+    Mt6589DramcState *s = opaque;
+
+    if (offset < sizeof(s->dma_reg)) {
+        return s->dma_reg[offset / 4];
+    }
+    return 0;
+}
+
+static void mt6589_dramc_dma_write(void *opaque, hwaddr offset, uint64_t value,
+                                   unsigned size)
+{
+    Mt6589DramcState *s = opaque;
+
+    if (offset >= sizeof(s->dma_reg)) {
+        return;
+    }
+    s->dma_reg[offset / 4] = (uint32_t)value;
+
+    if (offset == DMA_START && (value & 1u)) {
+        mt6589_dramc_dma_run(s);
+        /* Self-clearing: the guest polls this to know the copy finished. */
+        s->dma_reg[DMA_START / 4] = 0;
+    }
+}
+
+static const MemoryRegionOps mt6589_dramc_dma_ops = {
+    .read = mt6589_dramc_dma_read,
+    .write = mt6589_dramc_dma_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid.min_access_size = 1,
+    .valid.max_access_size = 4,
+    .impl.min_access_size = 1,
+    .impl.max_access_size = 4,
+};
+
 static uint64_t mt6589_dramc_read(void *opaque, hwaddr offset, unsigned size)
 {
     Mt6589DramcState *s = opaque;
@@ -117,25 +205,35 @@ static uint64_t mt6589_dramc_read(void *opaque, hwaddr offset, unsigned size)
     case DRAMC_SPCMDRESP:
         /*
          * Mode-register read response. DRAM_MRR() in mt_emi.c assembles a 9-bit
-         * manufacturer id from bits [10:8] of this register, three times, with a
-         * different DQ swap before each read:
+         * manufacturer id from three reads of this register, each preceded by a
+         * *different* DQ map written to DRAMC_RRRATE_CTL (0x1f4):
          *
-         *     MRR_value  = (resp & 0x700) >> 8
-         *     MRR_value |= ((resp & 0x700) >> 8) << 3
-         *     MRR_value |= ((resp & 0x300) >> 8) << 6
+         *   MRR_value  = (resp & 0x700) >> 8
+         *   MRR_value |= ((resp & 0x700) >> 8) << 3
+         *   MRR_value |= ((resp & 0x300) >> 8) << 6
          *
-         * The preloader then compares the result against DDR2_MODE_REG_5 for each
-         * of its EMI settings; the only values that table accepts, as its own
-         * "emi_settings[i].DDR2_MODE_REG_5:..." trace shows, are 1 and 6.
+         * The three maps are 0x000B0E0A, 0x000F0809 and 0x00000C0D (the
+         * values used when mt_get_MMD() != 1, which is the path this board
+         * takes). Answering the same constant to all three gives
+         * 1 | 8 | 64 = 73, which matches no DDR2_MODE_REG_5 entry.
          *
-         * Returning 0 - which is what an unimplemented register does - gives
-         * manu_id 0, no table entry matches, and the caller prints "setting
-         * failed 0xFFFFFFFF". Reporting 1 in bits [10:8] makes all three reads
-         * agree and yields 1 | 8 | 64... no: the shifts above combine to 1 because
-         * each field is bits [10:8] of the same value, so the low three bits are
-         * what matter. 1 lands on a real entry.
+         * The preloader compares the assembled value against DDR2_MODE_REG_5
+         * for each of its EMI settings, and the values it actually carries are 1
+         * and 6 (from its own "emi_settings[i].DDR2_MODE_REG_5:..." trace).
+         * Only the FIRST read may be non-zero for the total to come out as 1:
+         * 1 | (0 << 3) | (0 << 6) = 1. So the first map reports 1 in bits [10:8]
+         * and the other two report 0.
+         *
+         * This matters beyond tidiness: get_dram_rank_nr() returns -1 when no
+         * record matched, and that -1 becomes dram_rank_num in the boot argument,
+         * which is what LK branches on and hangs.
          */
-        return 1u << 8;
+        switch (s->reg[DRAMC_RRRATE_CTL / 4]) {
+        case 0x000B0E0A:
+            return 1u << 8;
+        default:
+            return 0;
+        }
 
     default:
         break;
@@ -199,6 +297,8 @@ static void mt6589_dramc_realize(DeviceState *dev, Error **errp)
 
     memory_region_init_io(&s->iomem, OBJECT(dev), &mt6589_dramc_ops, s,
                           "mt6589.dramc", MT6589_DRAMC_SIZE);
+    memory_region_init_io(&s->dma_iomem, OBJECT(dev), &mt6589_dramc_dma_ops, s,
+                          "mt6589.dramc.dma", MT6589_DMA_SIZE);
 }
 
 static void mt6589_dramc_init(Object *obj)
@@ -207,6 +307,7 @@ static void mt6589_dramc_init(Object *obj)
     SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
 
     sysbus_init_mmio(sbd, &s->iomem);
+    sysbus_init_mmio(sbd, &s->dma_iomem);
 }
 
 static void mt6589_dramc_class_init(ObjectClass *oc, const void *data)

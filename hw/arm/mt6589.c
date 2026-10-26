@@ -609,6 +609,12 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     qdev_realize(DEVICE(s->ddrphy), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->ddrphy), 0, MT6589_DDRPHY_BASE);
 
+    /*
+     * The system DMA. The DLE calibration's memory-to-memory test drives it; the
+     * datasheet lists it as "0x1100_0000 4KB DMA".
+     */
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->dramc), 1, MT6589_DMA_BASE);
+
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
                        qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ));
