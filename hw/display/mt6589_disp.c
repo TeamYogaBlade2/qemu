@@ -143,11 +143,289 @@ static const Mt6589DispReg mt6589_mutex_regs[] = {
 #define BLOCK(name_, base_, regs_, irq)                       \
     { name_, base_, regs_, ARRAY_SIZE(regs_), true, irq }
 
+/*
+ * DSI - display serial interface, 0x1400d000
+ *
+ * Every register the datasheet documents, generated from the extracted
+ * header, carrying its documented reset value. That distinction is the point:
+ * a register reading 0 because nothing models it looks exactly like one that
+ * is genuinely 0, whereas one reading its documented reset is evidence the
+ * block is there at all.
+ */
+
+static const Mt6589DispReg mt6589_dsi_regs[] = {
+    { 0x0000, 0x00000000, 0 },  /* DSI_START */
+    { 0x0004, 0x00000000, 0 },  /* DSI_STATUS */
+    { 0x0008, 0x00000000, 0 },  /* DSI_INTEN */
+    { 0x000c, 0x00000000, 0 },  /* DSI_INTSTA */
+    { 0x0010, 0x00000000, 0 },  /* DSI_COM_CON */
+    { 0x0014, 0x00000000, 0 },  /* DSI_MODE_CON */
+    { 0x0018, 0x00000000, 0 },  /* DSI_TXRX_CON */
+    { 0x001c, 0x00000000, 0 },  /* DSI_PSCON */
+    { 0x0020, 0x00000000, 0 },  /* DSI_VSA_NL */
+    { 0x0024, 0x00000000, 0 },  /* DSI_VBP_NL */
+    { 0x0028, 0x00000000, 0 },  /* DSI_VFP_NL */
+    { 0x002c, 0x00000000, 0 },  /* DSI_VACT_NL */
+    { 0x0050, 0x00000000, 0 },  /* DSI_HSA_WC */
+    { 0x0054, 0x00000000, 0 },  /* DSI_HBP_WC */
+    { 0x0058, 0x00000000, 0 },  /* DSI_HFP_WC */
+    { 0x0060, 0x00000000, 0 },  /* DSI_CMDQ_CON */
+    { 0x0074, 0x00000000, 0 },  /* DSI_RX_DATA03 */
+    { 0x0078, 0x00000000, 0 },  /* DSI_RX_DATA47 */
+    { 0x007c, 0x00000000, 0 },  /* DSI_RX_DATA8B */
+    { 0x0080, 0x00000000, 0 },  /* DSI_RX_DATAC */
+    { 0x0084, 0x00000000, 0 },  /* DSI_RX_RACK */
+    { 0x0088, 0x00000000, 0 },  /* DSI_RX_TRIG_STA */
+    { 0x0090, 0x00000000, 0 },  /* DSI_MEM_CONTI */
+    { 0x0094, 0x00000000, 0 },  /* DSI_FRM_BC */
+    { 0x0104, 0x00000000, 0 },  /* DSI_PHY_LCCON */
+    { 0x0108, 0x00000000, 0 },  /* DSI_PHY_LD0CON */
+    { 0x0110, 0x00005050, 0 },  /* DSI_PHY_TIMCON0 */
+    { 0x0114, 0x00004c68, 0 },  /* DSI_PHY_TIMCON1 */
+    { 0x0118, 0x00000000, 0 },  /* DSI_PHY_TIMCON2 */
+    { 0x011c, 0x00005070, 0 },  /* DSI_PHY_TIMCON3 */
+    { 0x0130, 0x00000000, 0 },  /* DSI_VM_CMD_ */
+    { 0x0144, 0x0000ffff, 0 },  /* DSI_CKSM_OUT */
+    { 0x0148, 0x00001008, 0 },  /* DSI_STATE_DBG0 */
+    { 0x014c, 0x00004000, 0 },  /* DSI_STATE_DBG1 */
+    { 0x0150, 0x00000200, 0 },  /* DSI_STATE_DBG2 */
+    { 0x0154, 0x00000210, 0 },  /* DSI_STATE_DBG3 */
+    { 0x0158, 0x00000210, 0 },  /* DSI_STATE_DBG4 */
+    { 0x0160, 0x00002000, 0 },  /* DSI_STATE_DBG6 */
+    { 0x0164, 0x00000000, 0 },  /* DSI_STATE_DBG7 */
+    { 0x0168, 0x00000000, 0 },  /* DSI_STATE_DBG8 */
+    { 0x016c, 0x00000000, 0 },  /* DSI_STATE_DBG9 */
+    { 0x0170, 0x00000000, 0 },  /* DSI_DEBUG_SEL */
+    { 0x0174, 0x00000000, 0 },  /* DSI_RESERVED */
+    { 0x0178, 0x00000000, 0 },  /* DSI_BIST_PATTERN */
+    { 0x017c, 0x00000000, 0 },  /* DSI_BIST_CON */
+    { 0x0180, 0x00000000, 0 },  /* DSI_CMDQ0 */
+};
+
+/*
+ * DPI - display parallel interface, 0x1400e000
+ *
+ * Every register the datasheet documents, generated from the extracted
+ * header, carrying its documented reset value. That distinction is the point:
+ * a register reading 0 because nothing models it looks exactly like one that
+ * is genuinely 0, whereas one reading its documented reset is evidence the
+ * block is there at all.
+ */
+
+static const Mt6589DispReg mt6589_dpi_regs[] = {
+    { 0x0000, 0x00000000, 0 },  /* DPI_EN */
+    { 0x0004, 0x00000000, 0 },  /* DPI_RST */
+    { 0x0008, 0x00000000, 0 },  /* DPI_INTEN */
+    { 0x000c, 0x00000000, 0 },  /* DPI_INTSTA */
+    { 0x0010, 0x00000000, 0 },  /* DPI_CON */
+    { 0x0014, 0x00000000, 0 },  /* DPI_CLKCON */
+    { 0x0018, 0x00000000, 0 },  /* DPI_SIZE */
+    { 0x0044, 0x00000000, 0 },  /* DPI_ESAV_VTIM_L */
+    { 0x0048, 0x00000000, 0 },  /* DPI_ESAV_VTIM_R */
+    { 0x004c, 0x00000000, 0 },  /* DPI_ESAV_FTIM */
+    { 0x0050, 0x00000400, 0 },  /* DPI_BG_HCNTL */
+    { 0x0054, 0x00000000, 0 },  /* DPI_BG_VCNTL */
+    { 0x0058, 0x00000000, 0 },  /* DPI_BG_COLOR */
+    { 0x005c, 0x00000000, 0 },  /* DPI_TGEN_POL */
+    { 0x0060, 0x00000000, 0 },  /* DPI_STATUS */
+    { 0x0064, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET0 */
+    { 0x0068, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET1 */
+    { 0x006c, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET2 */
+    { 0x0070, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET3 */
+    { 0x0074, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET4 */
+    { 0x0078, 0x00000000, 0 },  /* DPI_MATRIX_PREADD_SET0 */
+    { 0x007c, 0x00000000, 0 },  /* DPI_MATRIX_PREADD_SET1 */
+    { 0x0080, 0x00000000, 0 },  /* DPI_MATRIX_POSTADD_SET0 */
+    { 0x0084, 0x00000000, 0 },  /* DPI_MATRIX_POSTADD_SET1 */
+    { 0x0088, 0x00000000, 0 },  /* DPI_CLPF_SET */
+    { 0x008c, 0x00000000, 0 },  /* DPI_Y_LIMIT */
+    { 0x0090, 0x00000000, 0 },  /* DPI_C_LIMIT */
+    { 0x0094, 0x00000000, 0 },  /* DPI_YUV422_S */
+    { 0x0098, 0x00000000, 0 },  /* DPI_YCMUX_SE */
+    { 0x009c, 0x00000000, 0 },  /* DPI_EMBSYNC_ */
+    { 0x00a8, 0x00000000, 0 },  /* DPI_OUTPUT_S */
+    { 0x00ac, 0x00000000, 0 },  /* DPI_TMODE */
+    { 0x00b0, 0x00000000, 0 },  /* DPI_CHKSUM */
+    { 0x00b4, 0x00000000, 0 },  /* DPI_PATTERN */
+};
+
+/*
+ * WDMA - write DMA (capture path), 0x14004000
+ *
+ * Every register the datasheet documents, generated from the extracted
+ * header, carrying its documented reset value. That distinction is the point:
+ * a register reading 0 because nothing models it looks exactly like one that
+ * is genuinely 0, whereas one reading its documented reset is evidence the
+ * block is there at all.
+ */
+
+static const Mt6589DispReg mt6589_wdma_regs[] = {
+    { 0x0000, 0x00000000, 0 },  /* WDMA_INTEN */
+    { 0x000c, 0x00000000, 0 },  /* WDMA_RST */
+    { 0x0014, 0x00000000, 0 },  /* WDMA_CFG */
+    { 0x0018, 0x00000000, 0 },  /* WDMA_SRC_SIZE */
+    { 0x001c, 0x00000000, 0 },  /* WDMA_CLIP_SIZE */
+    { 0x002c, 0x000000ff, 0 },  /* WDMA_ALPHA */
+    { 0x00a4, 0x00000000, 0 },  /* WDMA_EXEC_DBG */
+    { 0x00a8, 0x00000000, 0 },  /* WDMA_CLIP_DBG */
+    { 0x0004, 0x00000000, 0 },  /* WDMA_INTSTA */
+    { 0x0008, 0x00000000, 0 },  /* WDMA_EN */
+    { 0x0010, 0x0000c000, 0 },  /* WDMA_SMI_CON */
+    { 0x0020, 0x00000000, 0 },  /* WDMA_CLIP_COORD */
+    { 0x0024, 0x00000000, 0 },  /* WDMA_DST_ADDR */
+    { 0x0028, 0x00000000, 0 },  /* WDMA_DST_W_IN_BYTE */
+    { 0x0034, 0x00008000, 0 },  /* WDMA_STA */
+    { 0x0038, 0x000001fe, 0 },  /* WDMA_BUF_CON1 */
+    { 0x003c, 0x00000808, 0 },  /* WDMA_BUF_CON2 */
+    { 0x0040, 0x00000000, 0 },  /* WDMA_C00 */
+    { 0x0044, 0x00000000, 0 },  /* WDMA_C02 */
+    { 0x0048, 0x00000000, 0 },  /* WDMA_C10 */
+    { 0x004c, 0x00000000, 0 },  /* WDMA_C12 */
+    { 0x0050, 0x00000000, 0 },  /* WDMA_C20 */
+    { 0x0054, 0x00000000, 0 },  /* WDMA_C22 */
+    { 0x0058, 0x00000000, 0 },  /* WDMA_PRE_ADD0 */
+    { 0x005c, 0x00000000, 0 },  /* WDMA_PRE_ADD2 */
+    { 0x0060, 0x00000000, 0 },  /* WDMA_POST_ADD0 */
+    { 0x0064, 0x00000000, 0 },  /* WDMA_POST_ADD2 */
+    { 0x0070, 0x00000000, 0 },  /* WDMA_DST_U_ADDR */
+    { 0x0074, 0x00000000, 0 },  /* WDMA_DST_V_ADDR */
+    { 0x0078, 0x00000000, 0 },  /* WDMA_DST_UV_PITCH */
+    { 0x00a0, 0x00008000, 0 },  /* WDMA_FLOW_CTRL_DBG */
+    { 0x0100, 0x00000000, 0 },  /* WDMA_DUMMY */
+    { 0x0e00, 0x00000000, 0 },  /* WDMA_DITHER_0 */
+    { 0x0e14, 0x00000000, 0 },  /* WDMA_DITHER_5 */
+    { 0x0e18, 0x00000000, 0 },  /* WDMA_DITHER_6 */
+    { 0x0e1c, 0x00000000, 0 },  /* WDMA_DITHER_7 */
+    { 0x0e20, 0x00000000, 0 },  /* WDMA_DITHER_8 */
+    { 0x0e24, 0x00000000, 0 },  /* WDMA_DITHER_9 */
+    { 0x0e28, 0x00000000, 0 },  /* WDMA_DITHER_10 */
+    { 0x0e30, 0x00000000, 0 },  /* WDMA_DITHER_12 */
+    { 0x0e34, 0x00000000, 0 },  /* WDMA_DITHER_13 */
+    { 0x0e38, 0x00000000, 0 },  /* WDMA_DITHER_14 */
+    { 0x0e3c, 0x00000000, 0 },  /* WDMA_DITHER_15 */
+    { 0x0e40, 0x00000000, 0 },  /* WDMA_DITHER_16 */
+    { 0x0e44, 0x00000000, 0 },  /* WDMA_DITHER_17 */
+};
+
+/*
+ * BLS - backlight scaling, 0x14008000
+ *
+ * Every register the datasheet documents, generated from the extracted
+ * header, carrying its documented reset value. That distinction is the point:
+ * a register reading 0 because nothing models it looks exactly like one that
+ * is genuinely 0, whereas one reading its documented reset is evidence the
+ * block is there at all.
+ */
+
+static const Mt6589DispReg mt6589_bls_regs[] = {
+    { 0x0018, 0x00000000, 0 },  /* BLS_SRC_SIZE */
+    { 0x001c, 0x00000000, 0 },  /* BLS_HIS_PROT */
+    { 0x0020, 0x00000000, 0 },  /* BLS_GAIN */
+    { 0x006c, 0x00000000, 0 },  /* BLS_SC_BIN_T */
+    { 0x0000, 0x00000000, 0 },  /* BLS_EN */
+    { 0x0004, 0x00000000, 0 },  /* BLS_RST */
+    { 0x0008, 0x00000000, 0 },  /* BLS_BLS_SETTING */
+    { 0x000c, 0x00000000, 0 },  /* BLS_HIS_SETTING */
+    { 0x0010, 0x00000000, 0 },  /* BLS_INTEN */
+    { 0x0014, 0x00000000, 0 },  /* BLS_INTSTA */
+    { 0x0024, 0x00000000, 0 },  /* BLS_DISTORT_POINT */
+    { 0x0028, 0x00000000, 0 },  /* BLS_GAIN_SETTING */
+    { 0x0030, 0x00000000, 0 },  /* BLS_GAMMA_SETTING */
+    { 0x0034, 0x00000000, 0 },  /* BLS_GAMMA_B */
+    { 0x0038, 0x00000000, 0 },  /* BLS_LUT_UPDATE */
+    { 0x003c, 0x00000000, 0 },  /* BLS_PWM_LUT_SEL */
+    { 0x0040, 0x000000ff, 0 },  /* BLS_MAXCLR_LIMIT */
+    { 0x0044, 0x00000000, 0 },  /* BLS_PRE_DIST_THD */
+    { 0x0048, 0x00000000, 0 },  /* BLS_DIST_THD_NORM */
+    { 0x004c, 0x00000000, 0 },  /* BLS_DIST_THD_DARK */
+    { 0x0050, 0x00000000, 0 },  /* BLS_DIST_THD_BRIGHT */
+    { 0x0054, 0x00000000, 0 },  /* BLS_DIST_THD_TEXT */
+    { 0x0058, 0x00000000, 0 },  /* BLS_DS_SETTING */
+    { 0x005c, 0x00000000, 0 },  /* BLS_BS_SETTING */
+    { 0x0060, 0x00000000, 0 },  /* BLS_TS_SETTING0 */
+    { 0x0064, 0x00000000, 0 },  /* BLS_TS_SETTING1 */
+    { 0x0070, 0x00000000, 0 },  /* BLS_FAST_IIR_ */
+    { 0x0074, 0x00000000, 0 },  /* BLS_FAST_IIR_ */
+    { 0x0078, 0x00000000, 0 },  /* BLS_SLOW_IIR_XCOEFF */
+    { 0x007c, 0x00000000, 0 },  /* BLS_SLOW_IIR_YCOEFF */
+    { 0x0080, 0x00000000, 0 },  /* BLS_PWM_DUTY */
+    { 0x0084, 0x00000001, 0 },  /* BLS_PWM_DUTY_GAIN */
+    { 0x0088, 0x00000000, 0 },  /* BLS_PATTERN */
+    { 0x0090, 0x00000000, 0 },  /* BLS_PWM_CON */
+    { 0x0094, 0x00008000, 0 },  /* PWM_H_DURATION */
+    { 0x0098, 0x00008000, 0 },  /* PWM_L_DURATION */
+    { 0x009c, 0x00000000, 0 },  /* PWM_G_DURATION */
+    { 0x00a0, 0x00000000, 0 },  /* PWM_SEND_DATA0 */
+    { 0x00a4, 0x00000000, 0 },  /* PWM_SEND_DATA1 */
+    { 0x00a8, 0x00000000, 0 },  /* PWM_WAVE_NUM */
+    { 0x00ac, 0x00000000, 0 },  /* PWM_DATA_WIDTH */
+    { 0x00b0, 0x00000000, 0 },  /* PWM_THRESH */
+    { 0x00b4, 0x00000000, 0 },  /* PWM_SEND_W */
+    { 0x0180, 0x00000000, 0 },  /* BLS_DARK_BIN */
+    { 0x0184, 0x00000000, 0 },  /* BLS_BRIGHT_BIN */
+    { 0x0200, 0x000001fe, 0 },  /* BLS_PWM_DUTY_RD */
+    { 0x0204, 0x0000ffff, 0 },  /* BLS_MAXCLR_RD */
+    { 0x0208, 0x00000080, 0 },  /* BLS_GAIN_RD */
+    { 0x020c, 0x00000000, 0 },  /* BLS_SC_RD */
+    { 0x0e00, 0x00000000, 0 },  /* BLS_DITHER_0 */
+    { 0x0e14, 0x00000000, 0 },  /* BLS_DITHER_5 */
+    { 0x0e18, 0x00000000, 0 },  /* BLS_DITHER_6 */
+    { 0x0e1c, 0x00000000, 0 },  /* BLS_DITHER_7 */
+    { 0x0e20, 0x00000000, 0 },  /* BLS_DITHER_8 */
+    { 0x0e24, 0x00000000, 0 },  /* BLS_DITHER_9 */
+    { 0x0e28, 0x00000000, 0 },  /* BLS_DITHER_10 */
+    { 0x0e2c, 0x00000000, 0 },  /* BLS_DITHER_11 */
+    { 0x0e30, 0x00000000, 0 },  /* BLS_DITHER_12 */
+    { 0x0e34, 0x00000000, 0 },  /* BLS_DITHER_13 */
+    { 0x0e38, 0x00000000, 0 },  /* BLS_DITHER_14 */
+    { 0x0e3c, 0x00000000, 0 },  /* BLS_DITHER_15 */
+    { 0x0e40, 0x00000000, 0 },  /* BLS_DITHER_16 */
+    { 0x0e44, 0x00000000, 0 },  /* BLS_DITHER_17 */
+};
+
+/*
+ * GAMMA - gamma correction, 0x14009000
+ *
+ * Every register the datasheet documents, generated from the extracted
+ * header, carrying its documented reset value. That distinction is the point:
+ * a register reading 0 because nothing models it looks exactly like one that
+ * is genuinely 0, whereas one reading its documented reset is evidence the
+ * block is there at all.
+ */
+
+static const Mt6589DispReg mt6589_gamma_regs[] = {
+    { 0x0000, 0x00000000, 0 },  /* DISP_GAMMA_EN */
+    { 0x0004, 0x00000000, 0 },  /* DISP_GAMMA_ */
+    { 0x0008, 0x00000000, 0 },  /* DISP_GAMMA_LUT_CLK_EN */
+    { 0x000c, 0x00000000, 0 },  /* DISP_GAMMA_I */
+    { 0x0010, 0x00000000, 0 },  /* DISP_GAMMA_I */
+    { 0x0e00, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_0 */
+    { 0x0e10, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_4 */
+    { 0x0e14, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_5 */
+    { 0x0e18, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_6 */
+    { 0x0e1c, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_7 */
+    { 0x0e20, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_8 */
+    { 0x0e24, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_9 */
+    { 0x0e28, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_10 */
+    { 0x0e2c, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_11 */
+    { 0x0e30, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_12 */
+    { 0x0e34, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_13 */
+    { 0x0e38, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_14 */
+    { 0x0e3c, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_15 */
+    { 0x0e40, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_16 */
+    { 0x0e44, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_17 */
+};
+
 static const Mt6589DispBlock mt6589_disp_blocks[] = {
     BLOCK("ovl",   0x14003000, mt6589_ovl_regs,   163),
     BLOCK("rdma",  0x14006000, mt6589_rdma_regs,  0),
     BLOCK("color", 0x1400a000, mt6589_color_regs, 0),
     BLOCK("mutex", 0x14011000, mt6589_mutex_regs, 0),
+    BLOCK("wdma",  0x14004000, mt6589_wdma_regs,  0),
+    BLOCK("bls",   0x14008000, mt6589_bls_regs,   0),
+    BLOCK("gamma", 0x14009000, mt6589_gamma_regs, 0),
+    BLOCK("dsi",   0x1400d000, mt6589_dsi_regs,   0),
+    BLOCK("dpi",   0x1400e000, mt6589_dpi_regs,   0),
 };
 
 /* ------------------------------------------------------------------------- */
