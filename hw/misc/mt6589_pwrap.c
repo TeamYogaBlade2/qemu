@@ -178,21 +178,29 @@ static const struct Mt6589PwrapDefault mt6589_pmic_defaults[] = {
      * mode. Bit 3 set = released, which is the state of a board nobody is
      * touching. Wire address 0x0144 >> 1 = 0x00a2.
      */
-    { 0x00A2, 0x0008 },
+    /*
+     * PWRKEY_DEB stays *clear*: bit 3 = 1 means released, and the preloader's
+     * platform_boot_status() checks mtk_detect_key(8) before it looks at the USB
+     * cable. Reporting the key as held is what selects BR_POWER_KEY, i.e. a
+     * normal boot from storage, which is the path this emulator is meant to
+     * exercise. (It is read again later and reported released there, which is
+     * what a real boot looks like too - the key is let go once boot starts.)
+     */
+    { 0x00A2, 0x0000 },
 
     /*
-     * CHR_CON0.PMIC_RGS_CHRDET (wire 0x0000, bit 5) - "a charger/USB cable is
-     * connected". platform_boot_status() in the preloader walks its boot-reason
-     * branches and uses this for BR_USB; with every branch failing it prints
-     * "Unknown boot!" and calls pl_power_off(), which is what a zeroed register
-     * file produces. docs/boot-chain.md in mt6589-emulator records the same
-     * conclusion from the Renode work.
+     * CHR_CON0.PMIC_RGS_CHRDET (wire 0x0000, bit 5) is left *clear*: no cable is
+     * connected. It has to be modelled explicitly rather than left to the
+     * zeroed register file only in the sense that its value is deliberate.
      *
-     * This is a bench-boot assumption, not a hardware measurement: the board is
-     * described as booting from USB. It is called out in the docs for that
-     * reason.
+     * Setting it (as the Renode work did, to get past "Unknown boot!") makes
+     * platform_boot_status() take the BR_USB branch *before* falling through,
+     * so the preloader enters USB download mode and prints the "READY" handshake
+     * instead of booting. With the power key reported as held the chain reaches
+     * BR_POWER_KEY first and never consults this, which is the ordering the
+     * preloader's own source has.
      */
-    { 0x0000, 0x0020 },
+    { 0x0000, 0x0000 },
 };
 
 /* Store the PMIC-side register file. Indexed by WACS number (address >> 1). */
@@ -271,6 +279,10 @@ static const uint16_t mt6589_fqmtr_results[] = { 5, 3000, 0, 0 };
 
 static uint16_t mt6589_pwrap_pmic_read(Mt6589PwrapState *s, uint16_t wacs)
 {
+    if (wacs == 0x0000 || wacs == 0x0051 || wacs == 0x00a2) {
+        qemu_log_mask(LOG_UNIMP, "pwrap: rd wacs=%04x -> %04x\n", wacs,
+                      s->pmic[wacs]);
+    }
     if (wacs == FQMTR_CON2_WACS) {
         /*
          * CON2 carries the measurement result. The guest reads it twice per

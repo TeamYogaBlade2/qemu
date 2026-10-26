@@ -363,9 +363,36 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
      * preloader concluded "download keys are pressed" and dropped into emergency
      * download mode. All ones means nothing is pressed.
      */
-    if (offset >= MT6589_KPD_BASE + MT6589_KPD_MEM1 &&
-        offset < MT6589_KPD_BASE + MT6589_KPD_MEM1 + 5 * 4) {
-        return (size == 1) ? 0xff : (size == 2) ? 0xffff : 0xffffffffu;
+    /*
+     * offset is relative to this region, which is mapped at 0x1000_0000 - so the
+     * KPD window is (MT6589_KPD_BASE - 0x10000000) + MT6589_KPD_MEM1, not the
+     * absolute address. Comparing against the absolute address here silently
+     * never matched, which is why the key registers appeared not to be read at
+     * all while the guest was in fact reading them.
+     */
+    if (offset >= (MT6589_KPD_BASE - 0x10000000u) + MT6589_KPD_MEM1 &&
+        offset < (MT6589_KPD_BASE - 0x10000000u) + MT6589_KPD_MEM1 + 5 * 4) {
+        /*
+         * One key is held: the power key (scan code 8, from the blade10
+         * cust_kpd.h), because that is how this chain is meant to start. The
+         * boot reason is decided in platform_boot_status() by trying
+         * mtk_detect_key(8) *before* usb_accessory_in(), so reporting the power
+         * key selects BR_POWER_KEY and the preloader boots from storage instead
+         * of entering USB download.
+         *
+         * The download-key combination deliberately stays clear. It is an AND of
+         * scan codes 8, 10 and 11, so holding 8 alone is not enough to trigger
+         * emergency download - holding all three was, and that is what an
+         * all-zeroes KP_MEM reports.
+         */
+        static const uint16_t mem[5] = {
+            /* bit 8 clear = power key pressed; everything else released. */
+            0xfeff, 0xffff, 0xffff, 0xffff, 0xff00,
+        };
+        unsigned idx = (offset - ((MT6589_KPD_BASE - 0x10000000u) +
+                                 MT6589_KPD_MEM1)) / 4;
+        uint32_t v = mem[idx];
+        return (size == 1) ? (v & 0xff) : (v & 0xffff);
     }
     qemu_log_mask(LOG_UNIMP, "%s: offset 0x%" HWADDR_PRIx " size %u\n",
                   __func__, offset, size);
