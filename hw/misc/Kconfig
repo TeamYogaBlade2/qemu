@@ -279,3 +279,7 @@ config MT6589_TOPRGU
 config MT6589_EFUSE
     bool
     default y
+
+config MT6589_PWRAP
+    bool
+    default y

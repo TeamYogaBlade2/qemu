@@ -27,6 +27,7 @@
 #include "hw/misc/mt6589_toprgu.h"
 #include "hw/misc/mt6589_efuse.h"
 #include "hw/display/mt6589_disp.h"
+#include "hw/misc/mt6589_pwrap.h"
 #include "qom/object.h"
 #include "qemu/timer.h"
 
@@ -222,6 +223,7 @@ struct Mt6589State {
     Mt6589NfiState *nfi;
     Mt6589ToprguState *toprgu;
     Mt6589EfuseState *efuse;
+    Mt6589PwrapState *pwrap;
 
     /* Card image applied to MSDC0 only, set by the machine from -drive. */
     char *card_image;

@@ -531,6 +531,17 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     /* Display subsystem: OVL, RDMA, COLOR, MUTEX. */
     mt6589_disp_create(s, s->gic);
 
+    /*
+     * PWRAP at 0x1000F000. The wrapper's FSM has to be modelled rather than left
+     * to the catch-all: the guest's transaction routine polls the FSM state and
+     * waits for ever at the wrong one, and every PMIC access in the boot chain
+     * goes through here.
+     */
+    s->pwrap = MT6589_PWRAP(object_new(TYPE_MT6589_PWRAP));
+    object_property_add_child(OBJECT(s), "pwrap", OBJECT(s->pwrap));
+    qdev_realize(DEVICE(s->pwrap), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->pwrap), 0, MT6589_PWRAP_BASE);
+
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
                        qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ));
