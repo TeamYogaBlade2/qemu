@@ -190,6 +190,17 @@
  * see the note at the end of this file about what that means. */
 #define MSDC_CARD_OCR 0xc0ff8000u
 
+/*
+ * Card capacity in 512-byte sectors. A card is at least 1 MiB so the CSD
+ * capacity field never underflows when no image is attached; with an image the
+ * real size is used.
+ */
+static uint32_t mt6589_msdc_sectors(Mt6589MsdcState *s)
+{
+    size_t bytes = s->image_size ? s->image_size : (1u << 20);
+    return (uint32_t)(bytes / 512);
+}
+
 static void mt6589_msdc_update_irq(Mt6589MsdcState *s)
 {
     /*
@@ -263,10 +274,37 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         s->sdc_resp[0] = s->sdc_arg & 0xfffu;
         break;
     case 9:   /* SEND_CSD */
-        s->sdc_resp[0] = 0x00ffffff;
-        s->sdc_resp[1] = 0xffffffff;
-        s->sdc_resp[2] = 0xffffffff;
-        s->sdc_resp[3] = 0xffffffff;
+        /*
+         * CSD_STRUCTURE lives at CSD bits 127:126. unstuff_bits() in mmc_core.c
+         * maps CSD bit b to resp[3 - b/32], so bit 126 lands in resp[0] bit 30 -
+         * the *top* word of the register pair is resp[0].
+         *
+         * The value has to be 1 (block-addressed SDHC), and the two obvious
+         * alternatives both fail on this driver:
+         *
+         *   3 (CSD_STRUCT_EXT_CSD) is what a real eMMC reports, but
+         *     mmc_decode_csd() only accepts 3 inside its mmc_card_sd() branch;
+         *     on the path this card actually takes it prints "Unknown CSD ver 3"
+         *     and returns MMC_ERR_INVALID, so no block device is ever registered
+         *     and the preloader asserts in sec.c on blkdev_get(). That was the
+         *     failure this model was producing.
+         *   2 (CSD_STRUCT_VER_1_2) is accepted on the eMMC path, but that path
+         *     is only reached when CMD55 fails, and making CMD55 time out aborts
+         *     the run before card init finishes.
+         *
+         * With 1 the driver fills the fixed fields in itself and takes the
+         * capacity from CSD bits 69:48 as capacity = (1 + m) << 10, so real
+         * block addressing and a real sector count come out either way.
+         *
+         * Capacity therefore rides in resp[1] and resp[2], not resp[0]:
+         * CSD bit 48 maps to resp[2] bit 16, so m spans resp[2] bits 31:16 and
+         * resp[1] bits 15:0. Writing those the other way round still looks like
+         * a plausible card, just with the wrong size.
+         */
+        s->sdc_resp[0] = (uint32_t)1 << 30;
+        s->sdc_resp[1] = (uint32_t)((mt6589_msdc_sectors(s) / 1024 - 1) & 0xffff) << 16;
+        s->sdc_resp[2] = (uint32_t)((mt6589_msdc_sectors(s) / 1024 - 1) >> 16) & 0x3f;
+        s->sdc_resp[3] = s->sdc_resp[0];
         break;
     case 13:  /* SEND_STATUS */
         s->sdc_resp[0] = 0x00000900;
