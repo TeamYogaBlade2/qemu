@@ -50,7 +50,8 @@ struct Mt6589MsdcState {
      * a copy. The boot partition can be 0x40000 bytes and is fetched in one go.
      */
     const uint8_t *data;
-    uint32_t data_len;
+    uint32_t data_len;    /* end of the current chunk */
+    uint32_t data_total;  /* end of the whole staged span */
     uint32_t data_pos;
 
     /* Backing card image, if one was supplied. */

@@ -182,6 +182,8 @@
  * transfers. Sized to one block so the ROM's first read sees a complete block.
  */
 #define BOOT_AREA_DEFAULT 512
+/* The unit emmc_boot_read_blocks consumes in, and therefore the refill size. */
+#define MSDC_CHUNK_BYTES 0x200
 
 /* A card that is present but has no backing image: identification succeeds and
  * any data transfer reads zeroes. Enough for the boot path to choose a device;
@@ -217,12 +219,14 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
     uint64_t off = s->sdc_arg;
 
     s->data = NULL;
+    s->data_total = 0;
     s->data_len = 0;
     s->data_pos = 0;
     if (s->image && off < s->image_size) {
         total = MIN(total, s->image_size - off);
         s->data = s->image + off;
-        s->data_len = total;
+        s->data_total = total;
+        s->data_len = MIN(total, (uint32_t)MSDC_CHUNK_BYTES);
     }
     s->int_status |= MSDC_INT_XFER_COMPL;
 }
@@ -356,8 +360,25 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
          * "data available", so a total remaining of 65536 words reads as 0 and
          * the drain loop exits immediately with nothing read.
          */
-        uint32_t words = (s->data_len > s->data_pos)
-                       ? (s->data_len - s->data_pos + 3) / 4 : 0;
+        /*
+         * Refill per 0x200-byte chunk rather than serving one contiguous span.
+         *
+         * emmc_boot_read_blocks consumes in 0x200 units and treats an empty FIFO
+         * as "come back later" - it loops on FIFOCS until either data appears or
+         * a status bit says the transfer ended. A model that drains one long span
+         * to zero leaves the loop waiting for data that it thinks is still
+         * coming, because nothing distinguishes "drained a chunk" from "finished".
+         *
+         * So the reported occupancy is always the size of the current chunk, and
+         * the next chunk is presented when the previous one is exhausted.
+         */
+        uint32_t remaining = (s->data_len > s->data_pos)
+                           ? s->data_len - s->data_pos : 0;
+        if (s->data && remaining == 0 && s->data_pos < s->data_total) {
+            remaining = MIN(s->data_total - s->data_pos,
+                            (uint32_t)MSDC_CHUNK_BYTES);
+        }
+        uint32_t words = (remaining + 3) / 4;
         if (words > 0xff) {
             words = 0xff;
         }
@@ -394,8 +415,14 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
         uint32_t v = 0;
         for (unsigned i = 0; i < 4; i++) {
             uint8_t b = 0;
-            if (s->data && s->data_pos < s->data_len) {
+            if (s->data && s->data_pos < s->data_total) {
                 b = s->data[s->data_pos++];
+                /* Roll into the next chunk when this one is exhausted, so the
+                 * guest sees fresh occupancy rather than a permanent zero. */
+                if (s->data_pos >= s->data_len) {
+                    s->data_len = MIN(s->data_total,
+                                      s->data_pos + (uint32_t)MSDC_CHUNK_BYTES);
+                }
             }
             v |= (uint32_t)b << (8 * i);
         }
@@ -479,7 +506,8 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
                           __func__, s->name, s->image ? "yes" : "no",
                           s->image ? s->image_size : (size_t)0);
             s->data = s->image;
-            s->data_len = s->image ? MIN(s->image_size, 0x40000) : 0;
+            s->data_total = s->image ? MIN(s->image_size, 0x40000) : 0;
+            s->data_len = MIN(s->data_total, (uint32_t)MSDC_CHUNK_BYTES);
             s->data_pos = 0;
             /*
              * BOOTUPSTATE (4) is what FUN_0000242c() classifies, but the data
