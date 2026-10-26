@@ -22,6 +22,9 @@ struct Mt6589EfuseState {
     SysBusDevice parent_obj;
 
     MemoryRegion iomem;
+
+    /* Bit 2 of the control word: a read was started. */
+    uint32_t ctrl;
 };
 
 #endif /* HW_MISC_MT6589_EFUSE_H */
