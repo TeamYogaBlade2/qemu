@@ -227,7 +227,18 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
     uint32_t block_size = s->sdc_blk_sz ? s->sdc_blk_sz : 512;
     uint32_t count = s->sdc_blk_num ? s->sdc_blk_num : 1;
     uint64_t total = (uint64_t)block_size * count;
-    uint64_t off = s->sdc_arg;
+    /*
+     * sdc_arg carries a BLOCK NUMBER here, not a byte offset. Evidence: the
+     * guest issues CMD17 with 0x13900 for the UBOOT partition, and 0x13900 is
+     * exactly 0x2720_0000 / 512 - the partition's start block from its own
+     * part_dump. Treating that as a byte offset read from 0x13900, which lands
+     * in the middle of PRELOADER, and the header check then failed with
+     * "UBOOT image doesn't exist" even though the image was correct.
+     *
+     * This also matches sdc_blk_sz being 0 when the command arrives: the guest
+     * never programmed a block size, so a fixed 512 is what the transfer uses.
+     */
+    uint64_t off = (uint64_t)s->sdc_arg * 512;
 
     s->data = NULL;
     s->data_total = 0;
@@ -313,6 +324,8 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         s->sdc_resp[0] = 0x00000900;
         break;
     case 17:  /* READ_SINGLE_BLOCK */
+        qemu_log_mask(LOG_UNIMP, "%s: %s CMD17 block 0x%x blksz %u\n",
+                      __func__, s->name, s->sdc_arg, s->sdc_blk_sz);
     case 18:  /* READ_MULTIPLE_BLOCK */
     case 24:  /* WRITE_BLOCK */
     case 25:  /* WRITE_MULTIPLE_BLOCK */
@@ -416,13 +429,25 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
             remaining = MIN(s->data_total - s->data_pos,
                             (uint32_t)MSDC_CHUNK_BYTES);
         }
-        uint32_t words = (remaining + 3) / 4;
-        if (words > 0xff) {
-            words = 0xff;
+        /*
+         * RXCNT counts *bytes*, not words. The drain loop in the preloader
+         * compares it directly against a byte count:
+         *
+         *     625a: ldr  r2, [r4, #0x14]   ; FIFOCS
+         *     625c: uxtb r2, r2            ; RXCNT, bits 7:0
+         *     625e: cmp  r2, r3            ; r3 is remaining BYTES
+         *     6260: blo  0x61f2            ; not enough yet - loop
+         *
+         * so reporting words leaves RXCNT a quarter of the byte count and the
+         * `blo` never falls through. Reported as bytes here.
+         */
+        uint32_t bytes = remaining;
+        if (bytes > 0xff) {
+            bytes = 0xff;
         }
         qemu_log_mask(LOG_UNIMP, "%s: %s FIFOCS read -> rxcnt %u\n",
-                      __func__, s->name, words);
-        return words;
+                      __func__, s->name, bytes);
+        return bytes;
     }
     case SDC_CFG:     return s->sdc_cfg;
     case SDC_CMD:     return s->sdc_cmd;
