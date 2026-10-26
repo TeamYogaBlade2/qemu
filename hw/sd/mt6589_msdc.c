@@ -77,7 +77,20 @@
 
 /* MSDC_FIFOCS */
 #define MSDC_FIFOCS_TXCNT     (0xfu << 0)
-#define MSDC_FIFOCS_RXCNT     (0xfu << 8)
+/*
+ * FIFOCS field positions are from the downstream preloader's msdc.h, because the
+ * datasheet's FIFOCS table lists only FIFOCLR:
+ *
+ *     MSDC_FIFOCS_RXCNT  (0xff << 0)    R
+ *     MSDC_FIFOCS_TXCNT  (0xff << 16)   R
+ *     MSDC_FIFOCS_CLR    (1UL  << 31)   RW
+ *
+ * RXCNT at 7:0, NOT 11:8 - the guest masks the register with 0xff to get the word
+ * count, so a count placed at 11:8 reads as zero and the drain loop exits
+ * immediately or spins.
+ */
+#define MSDC_FIFOCS_RXCNT     (0xffu << 0)
+#define MSDC_FIFOCS_TXCNT     (0xffu << 16)
 #define MSDC_FIFOCS_CLR       (1u << 31)
 
 /* Register offsets */
@@ -104,6 +117,21 @@
  * the guest's block count writes landed nowhere and reads of card status returned
  * a count.
  */
+/*
+ * SDC_CMD fields, from the datasheet: CMD in 5:0, BREAK 6, RSPTYP 9:7, DTYPE 12:11,
+ * RW 13, STOP 14, GOIRQ 15, LEN 27:16.
+ *
+ * DTYPE is a two-bit field, not a single "has data" bit: 00 = none, 01 = single
+ * block, 10 = multiple blocks, 11 = stream. Treating bit 11 alone as "has data"
+ * happens to work for single-block reads and breaks for multiple-block ones, so the
+ * whole field is decoded.
+ */
+#define SDC_CMD_CMD_MASK  0x3fu
+#define SDC_CMD_DTYPE_SHIFT 11
+#define SDC_CMD_DTYPE_MASK (0x3u << SDC_CMD_DTYPE_SHIFT)
+#define SDC_CMD_DTYPE_NONE 0u
+#define SDC_CMD_RW         (1u << 13)
+
 #define SDC_BLK_NUM   0x50
 #define SDC_CSTS      0x58
 #define SDC_CSTS_EN   0x5c
@@ -152,10 +180,41 @@ static void mt6589_msdc_update_irq(Mt6589MsdcState *s)
     qemu_set_irq(s->irq, (s->int_status & s->int_enable) != 0);
 }
 
+/*
+ * Fill the read FIFO from the backing image for the current block command.
+ *
+ * The FIFO is modelled as a byte buffer that RXDATA drains 4 bytes at a time,
+ * which is how the guest reads it (MSDC_RXDATA reads in the data-port loop). When
+ * no image is loaded the buffer stays zero, and the transfer still completes - a
+ * card that is present but blank.
+ */
+static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
+{
+    uint32_t block_size = s->sdc_blk_sz ? s->sdc_blk_sz : 512;
+    uint32_t count = s->sdc_blk_num ? s->sdc_blk_num : 1;
+    uint64_t total = (uint64_t)block_size * count;
+    uint64_t off = s->sdc_arg;
+
+    if (total > sizeof(s->fifo)) {
+        total = sizeof(s->fifo);
+    }
+    memset(s->fifo, 0, sizeof(s->fifo));
+    s->fifo_len = total;
+    s->fifo_pos = 0;
+
+    if (s->image && (off + total) <= s->image_size) {
+        memcpy(s->fifo, s->image + off, total);
+    }
+    s->int_status |= MSDC_INT_XFER_COMPL;
+}
+
 static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
 {
     uint32_t cmd = s->sdc_cmd;
     uint32_t opcode = cmd & 0x3f;
+    bool has_data = ((cmd & SDC_CMD_DTYPE_MASK) >> SDC_CMD_DTYPE_SHIFT) !=
+                    SDC_CMD_DTYPE_NONE;
+    bool is_write = (cmd & SDC_CMD_RW) != 0;
 
     s->sdc_sts &= ~0x1u;   /* SDC_STS.BUSY clear: the command finished */
 
@@ -191,6 +250,24 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         break;
     case 16:  /* SET_BLOCKLEN */
         s->sdc_resp[0] = 0x00000900;
+        break;
+    case 17:  /* READ_SINGLE_BLOCK */
+    case 18:  /* READ_MULTIPLE_BLOCK */
+    case 24:  /* WRITE_BLOCK */
+    case 25:  /* WRITE_MULTIPLE_BLOCK */
+        /*
+         * Data phase. The address in sdc_arg is a byte offset for SDHC cards,
+         * which is what the identification sequence above presents.
+         *
+         * Reads are served from the backing image when one is present, so a card
+         * image with a preloader in it is actually readable - without that the
+         * transfer reports success and returns zeroes, which looks like a card
+         * that is present but empty rather than a model with no data path.
+         */
+        s->sdc_resp[0] = 0x00000900;
+        if (has_data && !is_write) {
+            mt6589_msdc_fill_fifo(s);
+        }
         break;
     case 41:  /* SD_APP_OP_COND (after CMD55) */
         /* Busy must clear or the guest retries for ever; report ready. */
@@ -236,9 +313,17 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
         return s->int_status;
     case MSDC_INTEN:
         return s->int_enable;
-    case MSDC_FIFOCS:
-        /* FIFO always reports empty and ready: no data is buffered. */
-        return 0;
+    case MSDC_FIFOCS: {
+        /*
+         * RXCNT is the count of valid words left, in bits 11:8 - check against
+         * the datasheet rather than assuming the shift, because the guest polls
+         * this before every drain and a wrong field means it either spins waiting
+         * for data that is already there or reads past the end.
+         */
+        uint32_t words = (s->fifo_len > s->fifo_pos)
+                       ? (s->fifo_len - s->fifo_pos + 3) / 4 : 0;
+        return (words & 0xff) << 0;
+    }
     case SDC_CFG:     return s->sdc_cfg;
     case SDC_CMD:     return s->sdc_cmd;
     case SDC_ARG:     return s->sdc_arg;
@@ -253,7 +338,19 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     case EMMC_CFG0:   return s->emmc_cfg0;
     case EMMC_CFG1:   return s->emmc_cfg1;
     case EMMC_STS:    return s->emmc_sts;
-    case MSDC_RXDATA: return 0;
+    case MSDC_RXDATA: {
+        /* Drain the FIFO four bytes at a time, low byte first. Past the end the
+         * guest reads zero, which is what an exhausted FIFO looks like. */
+        uint32_t v = 0;
+        for (unsigned i = 0; i < 4; i++) {
+            uint8_t b = (s->fifo_pos < s->fifo_len) ? s->fifo[s->fifo_pos] : 0;
+            v |= (uint32_t)b << (8 * i);
+            if (s->fifo_pos < s->fifo_len) {
+                s->fifo_pos++;
+            }
+        }
+        return v;
+    }
     }
     qemu_log_mask(LOG_UNIMP, "%s: read offset 0x%" HWADDR_PRIx "\n",
                   __func__, offset);
@@ -350,6 +447,24 @@ static const MemoryRegionOps mt6589_msdc_ops = {
     .impl = { .min_access_size = 4, .max_access_size = 4 },
 };
 
+static void mt6589_msdc_finalize(Object *obj)
+{
+    Mt6589MsdcState *s = MT6589_MSDC(obj);
+
+    g_free(s->image);
+    s->image = NULL;
+}
+
+static void mt6589_msdc_realize(DeviceState *dev, Error **errp)
+{
+    Mt6589MsdcState *s = MT6589_MSDC(dev);
+
+    if (s->image) {
+        qemu_log_mask(LOG_UNIMP, "%s: %s has a %zu byte card image\n",
+                      __func__, s->name, s->image_size);
+    }
+}
+
 static void mt6589_msdc_init(Object *obj)
 {
     Mt6589MsdcState *s = MT6589_MSDC(obj);
@@ -367,8 +482,29 @@ static void mt6589_msdc_init(Object *obj)
     snprintf(s->name, sizeof(s->name), "msdc?");
 }
 
+static void mt6589_msdc_set_image(Object *obj, const char *value, Error **errp)
+{
+    Mt6589MsdcState *s = MT6589_MSDC(obj);
+    gchar *contents = NULL;
+    gsize len = 0;
+
+    if (!g_file_get_contents(value, &contents, &len, NULL)) {
+        error_setg(errp, "cannot read card image '%s'", value);
+        return;
+    }
+    g_free(s->image);
+    s->image = (uint8_t *)contents;
+    s->image_size = len;
+    qemu_log_mask(LOG_UNIMP, "%s: card image loaded, %zu bytes\n", __func__,
+                  (size_t)len);
+}
+
 static void mt6589_msdc_class_init(ObjectClass *oc, const void *data)
 {
+    DeviceClass *dc = DEVICE_CLASS(oc);
+
+    dc->realize = mt6589_msdc_realize;
+    object_class_property_add_str(oc, "image", NULL, mt6589_msdc_set_image);
 }
 
 static const TypeInfo mt6589_msdc_types[] = {
@@ -377,6 +513,7 @@ static const TypeInfo mt6589_msdc_types[] = {
         .parent = TYPE_SYS_BUS_DEVICE,
         .instance_size = sizeof(Mt6589MsdcState),
         .instance_init = mt6589_msdc_init,
+        .instance_finalize = mt6589_msdc_finalize,
         .class_init = mt6589_msdc_class_init,
     },
 };

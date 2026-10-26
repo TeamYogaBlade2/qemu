@@ -472,6 +472,15 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
         s->msdc[i] = MT6589_MSDC(object_new(TYPE_MT6589_MSDC));
         object_property_add_child(OBJECT(s), name, OBJECT(s->msdc[i]));
         snprintf(s->msdc[i]->name, sizeof(s->msdc[i]->name), "msdc%d", i);
+        /*
+         * The card goes in slot 0 and only slot 0. Setting the property on every
+         * MSDC - which is what -global mt6589-msdc.image=... does - models a board
+         * with a card in all five slots, and the ROM probes each of them.
+         */
+        if (i == 0 && s->card_image) {
+            object_property_set_str(OBJECT(s->msdc[i]), "image",
+                                    s->card_image, &error_fatal);
+        }
         qdev_realize(DEVICE(s->msdc[i]), sysbus_get_default(), &error_fatal);
         sysbus_mmio_map(SYS_BUS_DEVICE(s->msdc[i]), 0, MT6589_MSDC_BASE(i));
         sysbus_connect_irq(SYS_BUS_DEVICE(s->msdc[i]), 0,
@@ -556,12 +565,20 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
                                         &s->peri_iomem, -1);
 }
 
+/*
+ * Card image for MSDC0 - a property on the SoC rather than on each MSDC, because
+ * only one slot has a card in it.
+ */
+static const Property mt6589_props[] = {
+    DEFINE_PROP_STRING("card-image", Mt6589State, card_image),
+};
+
 static void mt6589_class_init(ObjectClass *oc, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(oc);
 
     dc->realize = mt6589_realize;
-    /* no device properties yet */
+    device_class_set_props(dc, mt6589_props);
 }
 
 static const TypeInfo mt6589_types[] = {

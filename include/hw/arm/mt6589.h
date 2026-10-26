@@ -222,6 +222,9 @@ struct Mt6589State {
     Mt6589ToprguState *toprgu;
     Mt6589EfuseState *efuse;
 
+    /* Card image applied to MSDC0 only, set by the machine from -drive. */
+    char *card_image;
+
     MemoryRegion sram;
     MemoryRegion sramboot;
     MemoryRegion bootrom;

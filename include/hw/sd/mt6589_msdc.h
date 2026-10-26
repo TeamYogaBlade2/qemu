@@ -42,6 +42,15 @@ struct Mt6589MsdcState {
     uint32_t emmc_cfg0;
     uint32_t emmc_cfg1;
     uint32_t emmc_sts;
+
+    /* Read FIFO, drained by MSDC_RXDATA. Sized for four 512-byte blocks. */
+    uint8_t fifo[2048];
+    uint32_t fifo_len;
+    uint32_t fifo_pos;
+
+    /* Backing card image, if one was supplied. */
+    uint8_t *image;
+    size_t image_size;
     /* For logging: which slot this is, so a command trace can be attributed. */
     char name[8];
 };
