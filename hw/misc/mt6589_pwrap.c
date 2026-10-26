@@ -84,6 +84,18 @@
 #define R_CIPHER_RDY   0x144
 #define R_SIDLY        0x0B0
 
+/*
+ * Auxiliary registers the preloader's own PWRAP init walks; the boot ROM never
+ * touches them. Offsets are PMIC_WRAP_BASE + n from the preloader's
+ * mt_pmic_wrap_init.h. They are plain read/write latches with no protocol
+ * behind them, so they are stored and read back rather than modelled.
+ */
+#define R_DIO_EN       0x008
+#define R_ARB_SIDLY    0x00C
+#define R_HIPRIO_EN    0x058
+#define R_HARB_STA0    0x05C
+#define R_HARB_STA1    0x060
+
 /* Status bits, from GET_INIT_DONE0 / GET_SYNC_IDLE0 / GET_WACS0_FSM. */
 #define STA_INIT_DONE  (1u << 21)
 #define STA_SYNC_IDLE  (1u << 20)
@@ -94,8 +106,16 @@
 #define FSM_IDLE       0
 #define FSM_WFVLDCLR   6
 
-/* Command word. */
-#define CMD_ISREAD     (1u << 31)
+/*
+ * Command word. Bit 31 is the WRITE flag, not the read flag: the preloader
+ * builds the command as `wacs_write = write << 31` (mt_pmic_wrap_init.c:338)
+ * and calls it with write=1 to store a PMIC register, write=0 to fetch one.
+ * Mainline agrees - pwrap_write32() sends `BIT(31) | ((adr >> 1) << 16) | wdata`
+ * (mtk-pmic-wrap.c:1686). Having this inverted made every read look like a
+ * write, so the FSM never parked in WFVLDCLR and the guest's wait_for_fsm_vldclr
+ * spun until it timed out with E_PWR_WAIT_IDLE_TIMEOUT.
+ */
+#define CMD_ISWRITE    (1u << 31)
 #define CMD_ADDR_SHIFT 16
 #define CMD_DATA_MASK  0xffffu
 
@@ -125,6 +145,54 @@ static const struct Mt6589PwrapDefault mt6589_pmic_defaults[] = {
      * consumer of the PMIC defers for ever.
      */
     { 0x0180, 0x2020 },
+
+    /*
+     * The RTC's frequency meter (FQMTR), reached through PWRAP like every other
+     * PMIC register: mt_rtc.c's RTC_Read() is pwrap_read(). The addresses halve
+     * on the wire, so FQMTR_CON0 0x0188 -> 0x00C4 and FQMTR_CON2 0x018C ->
+     * 0x00C6 (docs/ips/pwrap.md records the captured traffic).
+     *
+     * CON1 holds the window size (4) and CON0 the "started" bit; bit 3 of CON0
+     * reads back clear so the guest sees the measurement as already complete.
+     * The *results* are not a default value - see the CON2 read path.
+     */
+    { 0x00C4, 0x0000 },
+    { 0x00C5, 0x0004 },
+
+    /*
+     * DEW (the PMIC-side cipher engine) reports ready. mt_pmic_wrap_init.c waits
+     * with `do { pwrap_read_nochk(DEW_CIPHER_RDY, &rdata); } while (rdata != 0x1)`,
+     * so leaving this at the reset value 0 is an endless wait that only the
+     * 1-second timeout ends - which then reports "Enable Encryption fail" and
+     * drops the preloader into emergency download mode.
+     *
+     * DEW_BASE 0xBC00 + 0x20 = 0xBC20, halved to 0x5E10 on the wire.
+     */
+    { 0x5E10, 0x0001 },
+
+    /*
+     * CHRSTATUS.PWRKEY_DEB (0x0144 bit 3). pmic_detect_powerkey() reads it and
+     * reports the key as *released* when the bit is 1, pressed when it is 0 - so
+     * a zeroed PMIC register file says "power key held", which is exactly what
+     * sent the preloader to "Power key boot!" and then to emergency download
+     * mode. Bit 3 set = released, which is the state of a board nobody is
+     * touching. Wire address 0x0144 >> 1 = 0x00a2.
+     */
+    { 0x00A2, 0x0008 },
+
+    /*
+     * CHR_CON0.PMIC_RGS_CHRDET (wire 0x0000, bit 5) - "a charger/USB cable is
+     * connected". platform_boot_status() in the preloader walks its boot-reason
+     * branches and uses this for BR_USB; with every branch failing it prints
+     * "Unknown boot!" and calls pl_power_off(), which is what a zeroed register
+     * file produces. docs/boot-chain.md in mt6589-emulator records the same
+     * conclusion from the Renode work.
+     *
+     * This is a bench-boot assumption, not a hardware measurement: the board is
+     * described as booting from USB. It is called out in the docs for that
+     * reason.
+     */
+    { 0x0000, 0x0020 },
 };
 
 /* Store the PMIC-side register file. Indexed by WACS number (address >> 1). */
@@ -141,6 +209,8 @@ static void mt6589_pwrap_reset(DeviceState *dev)
     s->fsm = FSM_IDLE;
     s->rdata = 0;
     s->cipher_rdy = 1;
+    s->fqmtr_n = 0;
+    s->fqmtr_started = 0;
 }
 
 /* The status word as the guest's transaction routine expects to read it. */
@@ -154,6 +224,97 @@ static uint32_t mt6589_pwrap_status(Mt6589PwrapState *s)
     return STA_INIT_DONE | STA_SYNC_IDLE |
            ((s->fsm & 0x7u) << STA_FSM_SHIFT) |
            (s->rdata & STA_RDATA_MASK);
+}
+
+/*
+ * Read/write latches for the auxiliary registers above. The offsets are sparse,
+ * so they go through an explicit mapping rather than an index derived from the
+ * offset - 0x058 is not 0x00c + n.
+ */
+static uint32_t mt6589_pwrap_aux_get(Mt6589PwrapState *s, hwaddr offset)
+{
+    switch (offset) {
+    case R_DIO_EN:    return s->aux_dio_en;
+    case R_ARB_SIDLY: return s->aux_arb_sidly;
+    case R_HIPRIO_EN: return s->aux_hiprio_en;
+    case R_HARB_STA0: return s->aux_harb_sta0;
+    case R_HARB_STA1: return s->aux_harb_sta1;
+    default:          return 0;
+    }
+}
+
+static void mt6589_pwrap_aux_set(Mt6589PwrapState *s, hwaddr offset,
+                                 uint32_t value)
+{
+    switch (offset) {
+    case R_DIO_EN:    s->aux_dio_en = value;    break;
+    case R_ARB_SIDLY: s->aux_arb_sidly = value; break;
+    case R_HIPRIO_EN: s->aux_hiprio_en = value; break;
+    case R_HARB_STA0: s->aux_harb_sta0 = value; break;
+    case R_HARB_STA1: s->aux_harb_sta1 = value; break;
+    default:          break;
+    }
+}
+
+/*
+ * FQMTR results, in the order the guest asks for them. rtc_measure_four_clock()
+ * measures four clocks and rtc_xosc_check_clock() accepts only
+ * result[0] in 3..7, result[1] in 1500..6000, result[2] == 0, result[3] == 0.
+ * A board with a working 32 kHz crystal produces figures like these; the model
+ * returns them directly rather than simulating the measurement, so this is a
+ * shaped response and documented as such, not a measurement.
+ */
+#define FQMTR_CON0_WACS  0x00C4
+#define FQMTR_CON1_WACS  0x00C5
+#define FQMTR_CON2_WACS  0x00C6
+static const uint16_t mt6589_fqmtr_results[] = { 5, 3000, 0, 0 };
+
+static uint16_t mt6589_pwrap_pmic_read(Mt6589PwrapState *s, uint16_t wacs)
+{
+    if (wacs == FQMTR_CON2_WACS) {
+        /*
+         * CON2 carries the measurement result. The guest reads it twice per
+         * measurement with different expectations:
+         *
+         *   while (!(RTC_Read(FQMTR_CON2) == 0) && ...)   ; must be 0 to enter
+         *   ret = RTC_Read(FQMTR_CON2);                   ; the result
+         *
+         * Both are the same register, so the value handed back is whatever the
+         * last completed measurement produced - and it is 0 until the guest has
+         * started one by writing CON0. That is what makes the first wait exit.
+         */
+        if (s->fqmtr_started == 0) {
+            return 0;
+        }
+        uint32_t i = s->fqmtr_n ? s->fqmtr_n - 1 : 0;
+        return i < ARRAY_SIZE(mt6589_fqmtr_results) ?
+               mt6589_fqmtr_results[i] :
+               mt6589_fqmtr_results[ARRAY_SIZE(mt6589_fqmtr_results) - 1];
+    }
+    if (wacs == FQMTR_CON0_WACS) {
+        /* Bit 3 set means "measurement in progress"; report it finished. */
+        return s->pmic[wacs] & ~0x0008;
+    }
+    return s->pmic[wacs];
+}
+
+static void mt6589_pwrap_pmic_write(Mt6589PwrapState *s, uint16_t wacs,
+                                    uint16_t value)
+{
+    s->pmic[wacs] = value;
+
+    if (wacs == FQMTR_CON1_WACS) {
+        /*
+         * The window-size write is what advances the result sequence. Counting
+         * the CON0 start instead would be wrong: CON0 also carries the measure
+         * source, and get_frequency_meter() writes it on every call including
+         * the ones whose result is discarded by the wait above.
+         */
+        s->fqmtr_started = 1;
+        if (s->fqmtr_n < ARRAY_SIZE(mt6589_fqmtr_results) + 1) {
+            s->fqmtr_n++;
+        }
+    }
 }
 
 static uint64_t mt6589_pwrap_read(void *opaque, hwaddr offset, unsigned size)
@@ -175,6 +336,12 @@ static uint64_t mt6589_pwrap_read(void *opaque, hwaddr offset, unsigned size)
         return mt6589_pwrap_status(s);
     case R_VLDCLR:
         return 0;
+    case R_DIO_EN:
+    case R_ARB_SIDLY:
+    case R_HIPRIO_EN:
+    case R_HARB_STA0:
+    case R_HARB_STA1:
+        return mt6589_pwrap_aux_get(s, offset);
     case R_CIPHER_RDY:
         /*
          * PWRAP's own cipher-ready bit, not the PMIC-side DEW one. The kernel's
@@ -203,34 +370,41 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
 
     switch (offset) {
     case R_CMD:
-        if (cmd & CMD_ISREAD) {
+        if (cmd & CMD_ISWRITE) {
+            mt6589_pwrap_pmic_write(s, wacs, cmd & CMD_DATA_MASK);
+            /*
+             * Write: store, and return straight to idle. The guest's write path
+             * does not poll for the result, and parking here would make its next
+             * wait_for_fsm_idle see 6 and spin.
+             */
+            s->fsm = FSM_IDLE;
+        } else {
             /*
              * Read: put the value in the status word and park the FSM in
              * WFVLDCLR until the guest collects it by writing the valid-clear
-             * register. That is what the read path at 0x8d70 waits for.
+             * register. That is what wait_for_fsm_vldclr waits for.
              */
-            s->rdata = s->pmic[wacs];
+            s->rdata = mt6589_pwrap_pmic_read(s, wacs);
             s->fsm = FSM_WFVLDCLR;
-        } else {
-            /*
-             * Write: store, and return straight to idle. The write path at
-             * 0x8dbc does not poll, and parking here would make the guest's next
-             * wait_for_fsm_idle see 6 and spin.
-             */
-            s->pmic[wacs] = cmd & CMD_DATA_MASK;
-            s->fsm = FSM_IDLE;
         }
         return;
     case R_VLDCLR:
         /* Data collected: back to idle. */
         s->fsm = FSM_IDLE;
         return;
+    case R_DIO_EN:
+    case R_ARB_SIDLY:
+    case R_HIPRIO_EN:
+    case R_HARB_STA0:
+    case R_HARB_STA1:
+        mt6589_pwrap_aux_set(s, offset, cmd);
+        return;
     case R_MAN_CMD:
         /* Manual mode: same transaction, different register pair. */
-        if (cmd & CMD_ISREAD) {
-            s->rdata = s->pmic[wacs];
+        if (cmd & CMD_ISWRITE) {
+            mt6589_pwrap_pmic_write(s, wacs, cmd & CMD_DATA_MASK);
         } else {
-            s->pmic[wacs] = cmd & CMD_DATA_MASK;
+            s->rdata = mt6589_pwrap_pmic_read(s, wacs);
         }
         return;
     case R_WRAP_EN:

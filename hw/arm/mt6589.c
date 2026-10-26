@@ -351,6 +351,22 @@ static const MemoryRegionOps mt6589_sej_ops = {
  */
 static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 {
+    /*
+     * Keypad scan results. KP_MEM1..5 sit inside this window because the region
+     * is the whole peripheral range and KPD has no model of its own; the read is
+     * intercepted here rather than left to the catch-all so the value is right.
+     *
+     * No key is held on a headless emulated board, and the scan results are
+     * active low - mtk_key.c's mtk_detect_key() treats a *clear* bit as pressed
+     * (`din = DRV_Reg16(KP_MEM1 + (idx << 2)) & (1U << bit); if (!din) pressed`).
+     * Returning 0 therefore reports all 72 scan codes as held, which is how the
+     * preloader concluded "download keys are pressed" and dropped into emergency
+     * download mode. All ones means nothing is pressed.
+     */
+    if (offset >= MT6589_KPD_BASE + MT6589_KPD_MEM1 &&
+        offset < MT6589_KPD_BASE + MT6589_KPD_MEM1 + 5 * 4) {
+        return (size == 1) ? 0xff : (size == 2) ? 0xffff : 0xffffffffu;
+    }
     qemu_log_mask(LOG_UNIMP, "%s: offset 0x%" HWADDR_PRIx " size %u\n",
                   __func__, offset, size);
     return 0;
@@ -402,6 +418,9 @@ static void mt6589_init(Object *obj)
                            MT6589_SRAM_SIZE, &error_fatal);
     memory_region_init_ram(&s->sramboot, OBJECT(s), "mt6589.sramboot",
                            MT6589_SRAMBOOT_SIZE, &error_fatal);
+    /* The preloader's SRAM - see the note on MT6589_PRERAM_BASE. */
+    memory_region_init_ram(&s->preram, OBJECT(s), "mt6589.preram",
+                           MT6589_PRERAM_SIZE, &error_fatal);
 
     /* The boot ROM window. Backed by RAM rather than ROM so the image can be
      * loaded into it with -bios, and so a wrong write faults visibly rather than
@@ -553,6 +572,8 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     /* "BootROM/SRAM" at 0x1000_2000 - separate from the 64 KiB on-chip SRAM. */
     memory_region_add_subregion(get_system_memory(), MT6589_SRAMBOOT_BASE,
                                 &s->sramboot);
+    memory_region_add_subregion(get_system_memory(), MT6589_PRERAM_BASE,
+                                &s->preram);
     /* Mapped before the catch-all, which is added with a negative priority so
      * this wins. */
     memory_region_add_subregion(get_system_memory(), MT6589_SEJ_BASE,

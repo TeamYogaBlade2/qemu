@@ -27,6 +27,11 @@ struct Mt6589PwrapState {
     uint32_t fsm;
     uint32_t rdata;
     uint32_t cipher_rdy;
+    uint32_t aux_dio_en, aux_arb_sidly, aux_hiprio_en;
+    /* How many FQMTR measurements the guest has started. */
+    uint32_t fqmtr_n;
+    uint32_t fqmtr_started;
+    uint32_t aux_harb_sta0, aux_harb_sta1;
 
     /*
      * PMIC-side register file, indexed by WACS number (PMIC address >> 1). 32K

@@ -60,6 +60,20 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  */
 #define MT6589_SRAM_BASE        0x00100000
 #define MT6589_SRAM_SIZE        0x00010000
+/*
+ * The preloader's own SRAM. The boot ROM copies the whole preloader image -
+ * header included - to 0x1200_0D00 and jumps to 0x1200_1000, so this is where a
+ * stage runs from before DRAM is up. The datasheet describes 0x1200_0000 as a
+ * bank of small SRAMs (DISP 32 KiB at +0, AUDIO 16 KiB at +0x8000, ISP 80 KiB at
+ * +0xC000); they are presented here as one 2 MiB window, which is what the
+ * preloader actually uses and is documented as such rather than as a claim about
+ * the block layout.
+ */
+#define MT6589_PRERAM_BASE      0x12000000
+#define MT6589_PRERAM_SIZE      0x00200000
+#define MT6589_PRELOADER_LOAD   0x12000D00
+#define MT6589_PRELOADER_ENTRY  0x12001000
+
 #define MT6589_SRAMBOOT_BASE    0x10002000
 #define MT6589_SRAMBOOT_SIZE    0x00001000
 /*
@@ -68,6 +82,15 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  * configuration, so a model that does not answer produces a wrong board.
  */
 #define MT6589_CHIPID_BASE      0x08000000
+
+/*
+ * Keypad controller. Only the scan-result registers matter to the boot chain:
+ * the preloader reads KP_MEM1..5 to decide whether a download/recovery key
+ * combination is held. KP_MEM1 is at +0x04 (mtk_key.h), one 16-bit word per
+ * 16 scan codes.
+ */
+#define MT6589_KPD_BASE         0x10015000
+#define MT6589_KPD_MEM1         0x0004
 #define MT6589_DRAM_BASE        0x80000000
 
 #define MT6589_TOPCKGEN_BASE    0x10000000
@@ -230,6 +253,7 @@ struct Mt6589State {
 
     MemoryRegion sram;
     MemoryRegion sramboot;
+    MemoryRegion preram;
     MemoryRegion bootrom;
 
     /* SEJ. Interface read off the boot ROM (see the constants above); the
