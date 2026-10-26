@@ -268,6 +268,79 @@ static const MemoryRegionOps mt6589_gpt_ops = {
     },
 };
 
+
+/*
+ * SEJ - security engine.
+ *
+ * What is known, from the boot ROM's own code at 0xd060 rather than from any
+ * document: 16 bytes go into 0x1000_a010..0x1000_a01c, bit 0 of 0x1000_a008
+ * starts an operation, bit 17 of the same register means done, and 16 bytes of
+ * result come back from a DRAM address the caller supplies.
+ *
+ * What is NOT known is the transform. The datasheet has no register chapter for
+ * SEJ and the downstream tree has no driver. So this models the interface
+ * faithfully - a real caller's polling will complete and its result buffer will
+ * be filled - and performs a pass-through, logging every block. That is the
+ * honest position: the ROM gets through, and any later stage that depends on the
+ * *value* of a SEJ result fails with a logged block rather than with a mysterious
+ * wrong hash.
+ *
+ * If a fuller datasheet or a hardware trace of this address appears, the
+ * transform goes here and nothing else changes.
+ */
+static uint64_t mt6589_sej_read(void *opaque, hwaddr offset, unsigned size)
+{
+    Mt6589State *s = opaque;
+
+    switch (offset) {
+    case MT6589_SEJ_STATUS:
+        return s->sej_status;
+    case MT6589_SEJ_STATUS + 4:
+        return 0;
+    }
+    qemu_log_mask(LOG_UNIMP, "%s: read offset 0x%" HWADDR_PRIx "\n",
+                  __func__, offset);
+    return 0;
+}
+
+static void mt6589_sej_write(void *opaque, hwaddr offset, uint64_t value,
+                             unsigned size)
+{
+    Mt6589State *s = opaque;
+
+    if (offset == MT6589_SEJ_STATUS) {
+        if (value & MT6589_SEJ_STATUS_START) {
+            /*
+             * Report completion at once. The guest polls, it does not measure
+             * elapsed time, so a synchronous completion is faithful to what is
+             * observable - and no transform is performed because none is known.
+             */
+            s->sej_status |= MT6589_SEJ_STATUS_DONE;
+            qemu_log_mask(LOG_UNIMP,
+                          "%s: SEJ operation reported done WITHOUT performing it "
+                          "(transform unknown)\n", __func__);
+        }
+        return;
+    }
+    /* Key/IV/result registers beyond the control word are plain storage. Their
+     * layout is not documented and no transform is performed, so a store is kept
+     * (so it reads back) and nothing is derived from it. */
+    if (offset >= 0x10 && offset < 0x100) {
+        s->sej_data[(offset - 0x10) / 4] = value;
+        return;
+    }
+    qemu_log_mask(LOG_UNIMP, "%s: write 0x%" PRIx64 " to offset 0x%"
+                  HWADDR_PRIx "\n", __func__, value, offset);
+}
+
+static const MemoryRegionOps mt6589_sej_ops = {
+    .read = mt6589_sej_read,
+    .write = mt6589_sej_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 1, .max_access_size = 8 },
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+};
+
 /*
  * Peripheral-region catch-all. The datasheet documents a register for every
  * block in 0x1000_0000..0x14FF_FFFF; modelling behaviour for all of them is the
@@ -325,8 +398,10 @@ static void mt6589_init(Object *obj)
     /* SRAM: the boot ROM drops the preloader here. 256 KiB is the documented
      * size; the preloader is loaded by the BROM, so the region has to exist
      * before the guest starts rather than being created on first write. */
-    memory_region_init_ram(&s->sram, OBJECT(s), "mt6589.sram", 0x40000,
-                           &error_fatal);
+    memory_region_init_ram(&s->sram, OBJECT(s), "mt6589.sram",
+                           MT6589_SRAM_SIZE, &error_fatal);
+    memory_region_init_ram(&s->sramboot, OBJECT(s), "mt6589.sramboot",
+                           MT6589_SRAMBOOT_SIZE, &error_fatal);
 
     /* The boot ROM window. Backed by RAM rather than ROM so the image can be
      * loaded into it with -bios, and so a wrong write faults visibly rather than
@@ -334,6 +409,8 @@ static void mt6589_init(Object *obj)
      * the BROM's own vectors must be readable from address 0. */
     memory_region_init_ram(&s->bootrom, OBJECT(s), "mt6589.bootrom",
                            MT6589_BOOTROM_SIZE, &error_fatal);
+    memory_region_init_io(&s->sej_iomem, OBJECT(s), &mt6589_sej_ops, s,
+                          "mt6589.sej", 0x1000);
 }
 
 static void mt6589_realize(DeviceState *dev, Error **errp)
@@ -383,6 +460,33 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
                                     serial_hd(i), DEVICE_LITTLE_ENDIAN);
     }
 
+    /*
+     * MSDC0. The boot ROM programs the clock and polls MSDC_CFG.CKSTB, so a
+     * missing controller stalls it at SD initialisation - which is the point the
+     * QEMU port reached before this was added.
+     */
+    for (int i = 0; i < MT6589_NUM_MSDC; i++) {
+        char name[8];
+
+        snprintf(name, sizeof(name), "msdc%d", i);
+        s->msdc[i] = MT6589_MSDC(object_new(TYPE_MT6589_MSDC));
+        object_property_add_child(OBJECT(s), name, OBJECT(s->msdc[i]));
+        qdev_realize(DEVICE(s->msdc[i]), sysbus_get_default(), &error_fatal);
+        sysbus_mmio_map(SYS_BUS_DEVICE(s->msdc[i]), 0, MT6589_MSDC_BASE(i));
+        sysbus_connect_irq(SYS_BUS_DEVICE(s->msdc[i]), 0,
+                           qdev_get_gpio_in(s->gic, MT6589_MSDC_IRQ(i)));
+    }
+
+    /*
+     * NFI + NFIECC. The board has no NAND, but the boot ROM probes it as a
+     * preloader source and polls NFIECC_ENCIDLE bit 0 while doing so, so an
+     * absent block stalls the probe instead of letting the ROM move on.
+     */
+    s->nfi = MT6589_NFI(object_new(TYPE_MT6589_NFI));
+    object_property_add_child(OBJECT(s), "nfi", OBJECT(s->nfi));
+    qdev_realize(DEVICE(s->nfi), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->nfi), 0, MT6589_NFI_BASE);
+
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
                        qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ));
@@ -391,6 +495,13 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
                                 &s->sram);
     memory_region_add_subregion(get_system_memory(), MT6589_BOOTROM_BASE,
                                 &s->bootrom);
+    /* "BootROM/SRAM" at 0x1000_2000 - separate from the 64 KiB on-chip SRAM. */
+    memory_region_add_subregion(get_system_memory(), MT6589_SRAMBOOT_BASE,
+                                &s->sramboot);
+    /* Mapped before the catch-all, which is added with a negative priority so
+     * this wins. */
+    memory_region_add_subregion(get_system_memory(), MT6589_SEJ_BASE,
+                                &s->sej_iomem);
 
     /*
      * Catch-all for the infrastructure and peripheral windows. The datasheet

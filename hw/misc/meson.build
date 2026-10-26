@@ -1,3 +1,4 @@
+system_ss.add(when: 'CONFIG_MT6589_NFI', if_true: files('mt6589_nfi.c'))
 system_ss.add(when: 'CONFIG_APPLESMC', if_true: files('applesmc.c'))
 
 system_ss.add(when: 'CONFIG_EDU', if_true: files('edu.c'))

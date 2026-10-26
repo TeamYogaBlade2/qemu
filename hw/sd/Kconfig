@@ -27,3 +27,7 @@ config CADENCE_SDHCI
 config AXIADO_SDHCI
     bool
     select SDHCI
+
+config MT6589_MSDC
+    bool
+    default y

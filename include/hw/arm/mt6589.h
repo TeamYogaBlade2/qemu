@@ -22,6 +22,8 @@
 #include "hw/char/serial-mm.h"
 #include "hw/intc/arm_gic.h"
 #include "hw/arm/mt6589-regs/mt6589-apxgpt-regs.h"
+#include "hw/sd/mt6589_msdc.h"
+#include "hw/misc/mt6589_nfi.h"
 #include "qom/object.h"
 #include "qemu/timer.h"
 
@@ -43,7 +45,25 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  */
 #define MT6589_BOOTROM_BASE     0x00000000
 #define MT6589_BOOTROM_SIZE     0x00010000
+/*
+ * On-chip SRAM is 64 KiB at 0x0010_0000, not 256 KiB at 0x0010_0000 - datasheet
+ * p44: "0x0010_0000 0x0010_FFFF 64KB On-chip SRAM". Getting the size wrong is
+ * harmless until the boot ROM reads or writes past the end, at which point the
+ * access goes somewhere else entirely and the failure appears somewhere unrelated.
+ *
+ * Note this is a different thing from "BootROM/SRAM" at 0x1000_2000 (datasheet
+ * p45, 4 KiB), which is a separate block in the infrastructure window.
+ */
 #define MT6589_SRAM_BASE        0x00100000
+#define MT6589_SRAM_SIZE        0x00010000
+#define MT6589_SRAMBOOT_BASE    0x10002000
+#define MT6589_SRAMBOOT_SIZE    0x00001000
+/*
+ * Chip ID / HW and SW version, datasheet p44: 16 bytes at 0x0800_0000. The
+ * variant and revision live here and the preloader reads them to pick device
+ * configuration, so a model that does not answer produces a wrong board.
+ */
+#define MT6589_CHIPID_BASE      0x08000000
 #define MT6589_DRAM_BASE        0x80000000
 
 #define MT6589_TOPCKGEN_BASE    0x10000000
@@ -55,6 +75,35 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_SPM_BASE         0x10006000
 #define MT6589_GPT_BASE         0x10008000
 #define MT6589_PWRAP_BASE       0x1000F000
+/*
+ * SEJ - Security Engine Junior, 0x1000_A000.
+ *
+ * Datasheet Table 3-1/3-2 lists the window ("4KB SEJ") and has no register
+ * chapter. The interface comes from the guest's own code, and the boot ROM and
+ * the preloader use the same one at +0x08:
+ *
+ *   ldr  r4, [r0, #8]      ; r0 = 0x1000A000
+ *   orr  r4, r4, #1        ; bit 0 = start
+ *   str  r4, [r0, #8]
+ *   ldr  r4, [r0, #8]      ; <- poll
+ *   tst  r4, #0x902        ; bit 15 = done   <- see the warning below
+ *   beq  <poll>
+ *
+ * The `tst` operand is the trap. 0x902 is not the immediate: ARM encodes a data
+ * processing immediate as an 8-bit value rotated right by twice the top four
+ * bits, so imm8 = 0x02 with rotate 18 gives 0x00008000, which is bit 15. Reading
+ * the raw low twelve bits gives "bit 9", which is wrong. The Renode port recorded
+ * this exact mistake costing a round of wrong guesses, and I repeated it here
+ * before checking the preloader's copy of the same sequence.
+ *
+ * So: bit 0 starts, bit 15 means done. The transform itself is NOT known or
+ * modelled - see docs/qemu/sej.md - so a block is passed through and logged,
+ * which lets the interface complete while making a wrong result visible.
+ */
+#define MT6589_SEJ_BASE         0x1000A000
+#define MT6589_SEJ_STATUS       0x0008
+#define MT6589_SEJ_STATUS_START (1u << 0)
+#define MT6589_SEJ_STATUS_DONE  (1u << 15)
 #define MT6589_MCUSYS_BASE      0x10200000
 #define MT6589_SMI_COMMON_BASE  0x10202000
 #define MT6589_M4U_BASE         0x10205000
@@ -62,13 +111,24 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GIC_CPU_BASE     0x10212000
 
 #define MT6589_APDMA_BASE       0x11000000
+#define MT6589_NFI_BASE         0x11001000
+#define MT6589_NFIECC_BASE      0x11002000
 #define MT6589_AUXADC_BASE      0x11003000
 #define MT6589_UART0_BASE       0x11006000
 #define MT6589_UART1_BASE       0x11007000
 #define MT6589_UART2_BASE       0x11008000
 #define MT6589_UART3_BASE       0x11009000
 #define MT6589_I2C0_BASE        0x1100D000
-#define MT6589_MSDC0_BASE       0x11230000
+/*
+ * MSDC0..MSDC4, 64 KiB each at 0x1123_0000 + n*0x10000 (datasheet p46). The boot
+ * ROM probes all five when it looks for a preloader on a card, so only modelling
+ * MSDC0 leaves it polling an absent block on the second slot - which is exactly
+ * where it stalled.
+ */
+#define MT6589_MSDC_BASE(n)     (0x11230000 + (n) * 0x10000)
+#define MT6589_NUM_MSDC         5
+/* MSDC0's IRQ is 78 and they are consecutive in the GIC's SPI map. */
+#define MT6589_MSDC_IRQ(n)      (78 + (n))
 
 #define MT6589_DISP_BASE        0x14000000
 #define MT6589_OVL_BASE         0x14003000
@@ -135,9 +195,18 @@ struct Mt6589State {
     } gpt_chan[MT6589_GPT_NUM_CHANNELS];
 
     SerialMM *uart[MT6589_NUM_UARTS];
+    Mt6589MsdcState *msdc[MT6589_NUM_MSDC];
+    Mt6589NfiState *nfi;
 
     MemoryRegion sram;
+    MemoryRegion sramboot;
     MemoryRegion bootrom;
+
+    /* SEJ. Interface read off the boot ROM (see the constants above); the
+     * transform is not known, so a block is passed through and logged. */
+    MemoryRegion sej_iomem;
+    uint32_t sej_status;
+    uint32_t sej_data[0x3c];
     MemoryRegion peri_iomem;
 };
 

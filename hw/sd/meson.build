@@ -1,3 +1,4 @@
+system_ss.add(when: 'CONFIG_MT6589_MSDC', if_true: files('mt6589_msdc.c'))
 system_ss.add(when: 'CONFIG_PL181', if_true: files('pl181.c'))
 system_ss.add(when: 'CONFIG_SD', if_true: files('sd.c', 'core.c'))
 system_ss.add(when: 'CONFIG_SDHCI', if_true: files('sdhci.c'))
