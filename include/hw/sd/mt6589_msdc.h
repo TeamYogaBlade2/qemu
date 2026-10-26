@@ -45,10 +45,13 @@ struct Mt6589MsdcState {
     /* Bytes the boot-area fetch delivers; 0 means BOOT_AREA_DEFAULT. */
     uint32_t boot_area_len;
 
-    /* Read FIFO, drained by MSDC_RXDATA. Sized for four 512-byte blocks. */
-    uint8_t fifo[2048];
-    uint32_t fifo_len;
-    uint32_t fifo_pos;
+    /*
+     * Current data phase: a pointer into the card image plus a position, rather than
+     * a copy. The boot partition can be 0x40000 bytes and is fetched in one go.
+     */
+    const uint8_t *data;
+    uint32_t data_len;
+    uint32_t data_pos;
 
     /* Backing card image, if one was supplied. */
     uint8_t *image;

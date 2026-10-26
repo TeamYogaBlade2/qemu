@@ -216,15 +216,13 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
     uint64_t total = (uint64_t)block_size * count;
     uint64_t off = s->sdc_arg;
 
-    if (total > sizeof(s->fifo)) {
-        total = sizeof(s->fifo);
-    }
-    memset(s->fifo, 0, sizeof(s->fifo));
-    s->fifo_len = total;
-    s->fifo_pos = 0;
-
-    if (s->image && (off + total) <= s->image_size) {
-        memcpy(s->fifo, s->image + off, total);
+    s->data = NULL;
+    s->data_len = 0;
+    s->data_pos = 0;
+    if (s->image && off < s->image_size) {
+        total = MIN(total, s->image_size - off);
+        s->data = s->image + off;
+        s->data_len = total;
     }
     s->int_status |= MSDC_INT_XFER_COMPL;
 }
@@ -352,8 +350,8 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
          * this before every drain and a wrong field means it either spins waiting
          * for data that is already there or reads past the end.
          */
-        uint32_t words = (s->fifo_len > s->fifo_pos)
-                       ? (s->fifo_len - s->fifo_pos + 3) / 4 : 0;
+        uint32_t words = (s->data_len > s->data_pos)
+                       ? (s->data_len - s->data_pos + 3) / 4 : 0;
         return (words & 0xff) << 0;
     }
     case SDC_CFG:     return s->sdc_cfg;
@@ -371,15 +369,21 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     case EMMC_CFG1:   return s->emmc_cfg1;
     case EMMC_STS:    return s->emmc_sts;
     case MSDC_RXDATA: {
-        /* Drain the FIFO four bytes at a time, low byte first. Past the end the
-         * guest reads zero, which is what an exhausted FIFO looks like. */
+        /*
+         * Drain four bytes at a time from whatever the data phase staged.
+         *
+         * The data is a pointer into the card image rather than a copy, because the
+         * boot partition can be up to 0x40000 bytes and the guest fetches it in one
+         * go - it reads until FIFOCS.RXCNT is 0, so stopping after one block leaves
+         * it draining an empty FIFO and timing out.
+         */
         uint32_t v = 0;
         for (unsigned i = 0; i < 4; i++) {
-            uint8_t b = (s->fifo_pos < s->fifo_len) ? s->fifo[s->fifo_pos] : 0;
-            v |= (uint32_t)b << (8 * i);
-            if (s->fifo_pos < s->fifo_len) {
-                s->fifo_pos++;
+            uint8_t b = 0;
+            if (s->data && s->data_pos < s->data_len) {
+                b = s->data[s->data_pos++];
             }
+            v |= (uint32_t)b << (8 * i);
         }
         return v;
     }
@@ -434,33 +438,35 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
     case MSDC_BLK_SZ:
         s->sdc_blk_sz = value;
         return;
-    case EMMC_CFG0:
+    case EMMC_CFG0: {
+        /*
+         * BOOTSTART is an EDGE, not a level: the controller fetches the boot
+         * partition on the write that sets bit 0, and the old value has to be read
+         * before the store - reading it after gives the new value back and turns
+         * every edge test into "no edge".
+         */
+        uint32_t prev = s->emmc_cfg0;
         s->emmc_cfg0 = value;
-        if (value & EMMC_CFG0_BTSTART) {
+        if ((value & EMMC_CFG0_BTSTART) && !(prev & EMMC_CFG0_BTSTART)) {
             /*
-             * eMMC boot mode: the controller fetches the boot area itself over the
-             * card's boot protocol and drops it in the FIFO, so this is a DATA path,
-             * not just a status bit. Reporting "ack and data received" without
-             * filling the FIFO makes the ROM read zeroes and decide the boot area is
-             * empty - which is what it was doing before this filled the buffer.
+             * Stage the whole boot image, not one block. The guest's payload loader
+             * copies the first 0x200 bytes it already has and then fetches the rest
+             * in a single request, draining until RXCNT reaches 0; capping at one
+             * block means that request can never be satisfied and the guest sits in
+             * its timeout countdown.
              *
-             * The boot area is the start of the card image, which is how a real
-             * card's boot partition is laid out.
+             * eMMC boots from a separate boot partition, which this image does not
+             * carry, so the preloader is served from the front of the card. That is
+             * a decision about the modelled board, not a claim about the part.
              */
-            uint32_t len = s->boot_area_len ? s->boot_area_len : BOOT_AREA_DEFAULT;
-            if (len > sizeof(s->fifo)) {
-                len = sizeof(s->fifo);
-            }
-            memset(s->fifo, 0, sizeof(s->fifo));
-            s->fifo_len = len;
-            s->fifo_pos = 0;
-            if (s->image && s->image_size) {
-                uint32_t avail = (s->image_size < len) ? s->image_size : len;
-                memcpy(s->fifo, s->image, avail);
-            }
+            s->data = s->image;
+            s->data_len = s->image ? MIN(s->image_size, 0x40000) : 0;
+            s->data_pos = 0;
             s->emmc_sts = EMMC_STS_BOOTUPSTATE | EMMC_STS_BTARCV |
                           EMMC_STS_BTDRCV;
-            s->emmc_cfg0 &= ~EMMC_CFG0_BTSTART;
+            s->int_status |= MSDC_INT_XFER_COMPL;
+            mt6589_msdc_update_irq(s);
+        }
         }
         if (value & EMMC_CFG0_BTSTOP) {
             s->emmc_sts = 0;
