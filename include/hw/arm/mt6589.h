@@ -106,10 +106,29 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_SEJ_STATUS_START (1u << 0)
 #define MT6589_SEJ_STATUS_DONE  (1u << 15)
 #define MT6589_MCUSYS_BASE      0x10200000
-#define MT6589_SMI_COMMON_BASE  0x10202000
+/*
+ * SMI common. NOT 0x10202000: the datasheet gives this block two incompatible
+ * addresses in its own memory map (0x12000000 in the top-level table and
+ * 0x10202000 in the infrastructure table) and both are wrong. The downstream tree
+ * says SMI1_BASE = 0xF000E000 and the kernel dtsi says smi@1000e000, which agree
+ * on this. The local arbiters below ARE right in the datasheet, which is what
+ * makes the SMI row easy to trust by association - see docs in the emulator tree,
+ * docs/memory-map.md.
+ */
+#define MT6589_SMI_COMMON_BASE  0x1000E000
 #define MT6589_M4U_BASE         0x10205000
 #define MT6589_GIC_DIST_BASE    0x10211000
 #define MT6589_GIC_CPU_BASE     0x10212000
+
+/*
+ * SMI local arbiters. These do match the datasheet and the kernel dtsi. Note LARB1
+ * is 64 KiB where the others are 4 KiB.
+ */
+#define MT6589_LARB0_BASE       0x17001000
+#define MT6589_LARB1_BASE       0x16010000
+#define MT6589_LARB2_BASE       0x14010000
+#define MT6589_LARB3_BASE       0x15001000
+#define MT6589_LARB4_BASE       0x15002000
 
 #define MT6589_APDMA_BASE       0x11000000
 #define MT6589_NFI_BASE         0x11001000

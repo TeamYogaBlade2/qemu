@@ -269,6 +269,9 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         return;
     case SDC_CMD:
         s->sdc_cmd = value;
+        qemu_log_mask(LOG_UNIMP, "%s: CMD %u arg 0x%08x (slot %s)\n",
+                      __func__, (unsigned)(value & 0x3f), s->sdc_arg,
+                      s->name);
         /* The command is executed on the write, and BUSY is raised so a guest
          * that polls SDC_STS sees the same sequence as on hardware. */
         s->sdc_sts |= 0x1u;
@@ -293,6 +296,7 @@ static void mt6589_msdc_init(Object *obj)
 {
     Mt6589MsdcState *s = MT6589_MSDC(obj);
 
+
     memory_region_init_io(&s->iomem, OBJECT(s), &mt6589_msdc_ops, s,
                           "mt6589.msdc", 0x1000);
     sysbus_init_mmio(SYS_BUS_DEVICE(obj), &s->iomem);
@@ -300,6 +304,9 @@ static void mt6589_msdc_init(Object *obj)
 
     s->card_idle = true;
     s->sdc_sts = 0;
+    /* The SoC sets the slot number after realise; default to a placeholder so a
+     * log line is never attributing to garbage. */
+    snprintf(s->name, sizeof(s->name), "msdc?");
 }
 
 static void mt6589_msdc_class_init(ObjectClass *oc, const void *data)

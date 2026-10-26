@@ -471,6 +471,7 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
         snprintf(name, sizeof(name), "msdc%d", i);
         s->msdc[i] = MT6589_MSDC(object_new(TYPE_MT6589_MSDC));
         object_property_add_child(OBJECT(s), name, OBJECT(s->msdc[i]));
+        snprintf(s->msdc[i]->name, sizeof(s->msdc[i]->name), "msdc%d", i);
         qdev_realize(DEVICE(s->msdc[i]), sysbus_get_default(), &error_fatal);
         sysbus_mmio_map(SYS_BUS_DEVICE(s->msdc[i]), 0, MT6589_MSDC_BASE(i));
         sysbus_connect_irq(SYS_BUS_DEVICE(s->msdc[i]), 0,
