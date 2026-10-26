@@ -154,6 +154,20 @@
  */
 #define EMMC_CFG0_BTSTART (1u << 0)
 #define EMMC_CFG0_BTSTOP  (1u << 1)
+/*
+ * BOOTUPSTATE (bit 4) is the one the boot ROM waits on, not the ack/data-received
+ * bits above it:
+ *
+ *     0x233a  ldr r0, [r4, #120]   ; r4 = 0x11230000, so EMMC_STS
+ *     0x233e  lsls r0, r0, #27     ; bit 4 into the sign bit
+ *     0x2340  bpl  ...             ; branch while bit 4 is clear
+ *
+ * "Boot operation has completed". Reporting only BTARCV/BTDRCV leaves this clear and
+ * the ROM waits for ever - which is why it never issued commands: it was already past
+ * the command path, waiting for a boot-mode handshake that the model answered flatly.
+ */
+#define EMMC_STS_BOOTUPSTATE (1u << 4)
+
 #define EMMC_STS_BTDERR   (1u << 0)
 #define EMMC_STS_BTAERR   (1u << 1)
 #define EMMC_STS_BTDTO    (1u << 2)
@@ -303,10 +317,21 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
 
     switch (offset) {
     case MSDC_CFG:
-        /* CKSTB reads 1 whenever the clock is not powered down: there is no
-         * real oscillator to settle, and reporting "not stable" is what stalls
-         * the boot ROM. */
-        return (s->cfg & ~MSDC_CFG_CKSTB) |
+        /*
+         * CKSTB (bit 7) reads 1 whenever the clock is not powered down: there is no
+         * real oscillator to settle, and reporting "not stable" stalls the boot ROM.
+         *
+         * RST (bit 2) must never read back set. It is write-one self-clearing, and
+         * the boot ROM polls its *absence*:
+         *
+         *     0x2194  ldr r0, [r4]        ; MSDC_CFG
+         *     0x2196  lsls r0, r0, #0x1d  ; bit 2 -> sign
+         *     0x2198  bmi  0x2194
+         *
+         * Clearing it on write is not enough - it must not be visible in a
+         * read-modify-write either, or the loop never ends.
+         */
+        return (s->cfg & ~(MSDC_CFG_CKSTB | MSDC_CFG_RST)) |
                ((s->cfg & MSDC_CFG_CKPDN) ? 0 : MSDC_CFG_CKSTB);
     case MSDC_IOCON:  return s->iocon;
     case MSDC_PS: {
@@ -433,7 +458,8 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
                 uint32_t avail = (s->image_size < len) ? s->image_size : len;
                 memcpy(s->fifo, s->image, avail);
             }
-            s->emmc_sts = EMMC_STS_BTARCV | EMMC_STS_BTDRCV;
+            s->emmc_sts = EMMC_STS_BOOTUPSTATE | EMMC_STS_BTARCV |
+                          EMMC_STS_BTDRCV;
             s->emmc_cfg0 &= ~EMMC_CFG0_BTSTART;
         }
         if (value & EMMC_CFG0_BTSTOP) {
