@@ -283,3 +283,8 @@ config MT6589_EFUSE
 config MT6589_PWRAP
     bool
     default y
+
+config MT6589_DRAMC
+    bool
+    default y
+    depends on MT6589

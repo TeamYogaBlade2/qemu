@@ -23,6 +23,7 @@
 #include "hw/intc/arm_gic.h"
 #include "hw/arm/mt6589-regs/mt6589-apxgpt-regs.h"
 #include "hw/sd/mt6589_msdc.h"
+#include "hw/misc/mt6589_dramc.h"
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
 #include "hw/misc/mt6589_efuse.h"
@@ -98,6 +99,16 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_SRAMROM_BASE     0x10002000
 #define MT6589_PERI_BASE        0x10003000
 #define MT6589_DRAMC_BASE       0x10004000
+#define MT6589_DRAMC_SIZE       0x1000
+
+/*
+ * The DDR PHY. It mirrors DRAMC's register layout for the delay/tuning block, and
+ * the preloader polls it directly (DDRPHY_BASE in the downstream mt6589.h is
+ * IO_PHYS + 0x11000). Left unimplemented, every delay read comes back 0 and the
+ * calibration's per-tap scan has no passing tap at all.
+ */
+#define MT6589_DDRPHY_BASE      0x10011000
+#define MT6589_DDRPHY_SIZE      0x1000
 #define MT6589_GPIO_BASE        0x10005000
 #define MT6589_SPM_BASE         0x10006000
 #define MT6589_GPT_BASE         0x10008000
@@ -247,6 +258,8 @@ struct Mt6589State {
     Mt6589ToprguState *toprgu;
     Mt6589EfuseState *efuse;
     Mt6589PwrapState *pwrap;
+    Mt6589DramcState *dramc;
+    Mt6589DramcState *ddrphy;
 
     /* Card image applied to MSDC0 only, set by the machine from -drive. */
     char *card_image;

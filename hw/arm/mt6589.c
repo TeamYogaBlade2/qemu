@@ -588,6 +588,27 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     qdev_realize(DEVICE(s->pwrap), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->pwrap), 0, MT6589_PWRAP_BASE);
 
+    /*
+     * DRAMC at 0x1000_4000. The preloader runs a full DDR calibration here and
+     * asks the controller's test agent whether each delay tap works; with the
+     * window unimplemented every answer is 0, so the calibration reports failure
+     * and the DRAM rank count is left unset. See hw/misc/mt6589_dramc.c.
+     */
+    s->dramc = MT6589_DRAMC(object_new(TYPE_MT6589_DRAMC));
+    object_property_add_child(OBJECT(s), "dramc", OBJECT(s->dramc));
+    qdev_realize(DEVICE(s->dramc), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->dramc), 0, MT6589_DRAMC_BASE);
+
+    /*
+     * The DDR PHY mirrors the tuning registers. It gets its own instance rather
+     * than aliasing DRAMC because the guest programs them independently - DRAMC's
+     * copy and the PHY's are written separately during calibration.
+     */
+    s->ddrphy = MT6589_DRAMC(object_new(TYPE_MT6589_DRAMC));
+    object_property_add_child(OBJECT(s), "ddrphy", OBJECT(s->ddrphy));
+    qdev_realize(DEVICE(s->ddrphy), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->ddrphy), 0, MT6589_DDRPHY_BASE);
+
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
                        qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ));
@@ -599,8 +620,15 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     /* "BootROM/SRAM" at 0x1000_2000 - separate from the 64 KiB on-chip SRAM. */
     memory_region_add_subregion(get_system_memory(), MT6589_SRAMBOOT_BASE,
                                 &s->sramboot);
-    memory_region_add_subregion(get_system_memory(), MT6589_PRERAM_BASE,
-                                &s->preram);
+    /*
+     * Added as an overlap with a *positive* priority: the peripheral catch-all
+     * below spans 0x1000_0000..0x17FF_FFFF, which covers this window, so a plain
+     * add_subregion here would be shadowed by it. That is worth spelling out
+     * because it does not fail loudly - the reads simply land in the catch-all and
+     * return 0, so the preloader's own data area reads as zeroes.
+     */
+    memory_region_add_subregion_overlap(get_system_memory(), MT6589_PRERAM_BASE,
+                                        &s->preram, 1);
     /* Mapped before the catch-all, which is added with a negative priority so
      * this wins. */
     memory_region_add_subregion(get_system_memory(), MT6589_SEJ_BASE,
