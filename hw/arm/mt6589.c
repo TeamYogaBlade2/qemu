@@ -753,13 +753,18 @@ static void mt6589_init(Object *obj)
     Mt6589State *s = MT6589(obj);
 
     /*
-     * SPM power-domain status: everything up except the two modem domains, which
-     * have no hardware behind them here - see the note in mt6589_peri_read().
+     * SPM power-domain status starts at zero: the kernel's clock framework counts
+     * what *it* enabled, so a domain that reads as up while its mux usecount is
+     * zero sends mt_subsys_init() into sys_disable_locked() - measured as
+     * "Kernel BUG at c003fed4", mux_disable_locked+0x70, BUG_ON(!mux->cnt), then
+     * a panic. Reporting everything off makes the init a no-op instead, and each
+     * driver powers on what it needs.
+     *
      * Status bits from mt_spm_mtcmos.c: MD1 = 1 << 0, MD2 = 1 << 1, DPY = 1 << 2,
      * DIS = 1 << 3, MFG = 1 << 4, ISP = 1 << 5, IFR = 1 << 6, VEN = 1 << 7,
      * VDE = 1 << 8.
      */
-    s->spm_status = 0xffffffffu & ~0x13u;
+    s->spm_status = 0;
 
     memory_region_init_io(&s->gpt_iomem, OBJECT(s), &mt6589_gpt_ops, s,
                           "mt6589.gpt", 0x1000);
