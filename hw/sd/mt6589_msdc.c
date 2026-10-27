@@ -445,7 +445,6 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
 
     s->sdc_sts &= ~0x1u;   /* SDC_STS.BUSY clear: the command finished */
 
-    fprintf(stderr, "OP %d arg=%x\n", opcode, s->sdc_arg);
     switch (opcode) {
     case 0:   /* GO_IDLE_STATE */
         s->card_idle = true;
