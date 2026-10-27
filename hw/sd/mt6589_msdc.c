@@ -399,8 +399,8 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
     if (s->scr_pending) {
         s->scr_pending = 0;
         s->data = s->meta;
-        s->data_total = 8;
-        s->data_len = 8;
+        s->data_total = s->meta_len;
+        s->data_len = s->meta_len;
         return;
     }
     if (s->image && off < s->image_size) {
@@ -445,13 +445,15 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
 
     s->sdc_sts &= ~0x1u;   /* SDC_STS.BUSY clear: the command finished */
 
+    fprintf(stderr, "OP %d arg=%x\n", opcode, s->sdc_arg);
     switch (opcode) {
     case 0:   /* GO_IDLE_STATE */
         s->card_idle = true;
         s->sdc_resp[0] = 0;
         break;
     case 1:   /* SEND_OP_COND (MMC) */
-        s->sdc_resp[0] = MSDC_CARD_OCR;
+        s->is_mmc = 1;
+        s->sdc_resp[0] = MSDC_CARD_OCR | (1u << 31);
         break;
     case 2:   /* ALL_SEND_CID */
         s->sdc_resp[0] = 0x12345678;
@@ -462,8 +464,25 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
     case 3:   /* SET_RELATIVE_ADDR */
         s->sdc_resp[0] = s->sdc_arg & 0xffff0000u;
         break;
-    case 8:   /* SEND_IF_COND */
-        /* Echo the check pattern back, as a card that supports it must. */
+    case 8:   /* SEND_IF_COND (SD) / SEND_EXT_CSD (MMC) */
+        fprintf(stderr, "CMD8 arg=%x dt=%u blksz=%u blk=%u\n", s->sdc_arg,
+                (unsigned)((s->sdc_cmd >> 11) & 3), s->sdc_blk_sz, s->sdc_blk_num);
+        if (s->sdc_arg == 0) {
+            memset(s->meta, 0, sizeof(s->meta));
+            s->meta[192] = 7;
+            s->meta[183] = 2;
+            s->meta[212] = 80896 & 0xff;
+            s->meta[213] = (80896 >> 8) & 0xff;
+            s->meta[214] = (80896 >> 16) & 0xff;
+            s->meta[215] = (80896 >> 24) & 0xff;
+            s->meta_len = 512;
+            s->scr_pending = 1;
+            s->sdc_resp[0] = 0x00000900;
+            if (has_data && !is_write) {
+                mt6589_msdc_fill_fifo(s);
+            }
+            break;
+        }
         s->sdc_resp[0] = s->sdc_arg & 0xfffu;
         break;
     case 9:   /* SEND_CSD */
@@ -494,6 +513,39 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
          * resp[1] bits 15:0. Writing those the other way round still looks like
          * a plausible card, just with the wrong size.
          */
+        if (s->is_mmc) {
+            /*
+             * eMMC CSD. mmc_decode_csd() computes capacity from the *legacy*
+             * fields for anything that is not an SD card with struct 1:
+             *
+             *     e = BITS(resp,47,3); m = BITS(resp,62,12);
+             *     csd->capacity = (1 + m) << (e + 2);
+             *     csd->read_blkbits = BITS(resp,80,4);
+             *
+             * so writing the SDHC layout here gives capacity 0 and the preloader
+             * reports "nblks(0)" then fails to read UBOOT.
+             *
+             * e is only three bits, so the shift (e + 2) tops out at 9 - the
+             * first attempt used e = 8, which overflows the field and decodes as
+             * 0. With e = 7 and m = 157 the capacity is 158 << 9 = 80896
+             * sectors, and read_blkbits 9 keeps nblks == capacity.
+             *
+             * CSD bit b lives in resp[3 - b/32] at bit (b % 32): bits 47..49 (e)
+             * are resp[2] bits 15..17, bits 62..63 are resp[2] bits 30..31 and
+             * bits 64..73 are resp[1] bits 0..9, so the 12-bit m splits 2/10.
+             */
+            /*
+             * The response words are stored in the opposite order to the CSD bit
+             * numbering: the working SD path sets sdc_resp[1] = m << 16 and the
+             * driver reads that as CSD bits 48..69, which means driver word 2 is
+             * model word 1. Everything below is placed with that reversal.
+             */
+            s->sdc_resp[3] = 0xc0000000u;               /* CSD_STRUCT_EXT_CSD */
+            s->sdc_resp[1] = (7u << 15) | ((157u & 0x3u) << 30);   /* e, m low */
+            s->sdc_resp[2] = (9u << 16) | ((157u >> 2) & 0x3ffu);  /* blkbits, m hi */
+            s->sdc_resp[0] = 0;
+            break;
+        }
         s->sdc_resp[0] = (uint32_t)1 << 30;
         s->sdc_resp[1] = (uint32_t)((mt6589_msdc_sectors(s) / 1024 - 1) & 0xffff) << 16;
         s->sdc_resp[2] = (uint32_t)((mt6589_msdc_sectors(s) / 1024 - 1) >> 16) & 0x3f;
@@ -540,9 +592,10 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         /* Busy must clear or the guest retries for ever; report ready. */
         s->sdc_resp[0] = MSDC_CARD_OCR | (1u << 31);
         break;
-    case 55:  /* APP_CMD */
-        s->sdc_resp[0] = 0x00000920;
-        break;
+    case 55:  /* APP_CMD - eMMC has no SD application commands */
+        s->int_status |= MSDC_INT_CMDTMO;
+        mt6589_msdc_update_irq(s);
+        return;
     case 6:   /* SWITCH, and ACMD6 (SET_BUS_WIDTH) after CMD55 */
         /*
          * Both are "accepted, nothing to report": CM6 switches an eMMC's EXT_CSD
@@ -580,6 +633,7 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
          * the driver keep 4-bit mode instead of dropping to 1-bit.
          */
         memset(s->meta, 0, sizeof(s->meta));
+        s->meta_len = 8;
         s->meta[0] = 0x02;   /* SD_SPEC = 2 */
         s->meta[1] = 0x35;   /* SECURITY = 2, BUS_WIDTHS = 1|4 */
         s->meta[2] = 0x80;

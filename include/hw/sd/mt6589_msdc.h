@@ -70,9 +70,11 @@ struct Mt6589MsdcState {
      * the 8-byte SCR returned by ACMD51, for instance. `data` points at the
      * image, so those transfers need their own buffer to point into.
      */
-    uint8_t meta[16];
+    uint8_t meta[512];
     /* Set by ACMD51 so the next FIFO fill serves `meta` instead of the image. */
     int scr_pending;
+    int is_mmc;
+    int meta_len;
     /*
      * XFER_COMPL has to be raised once per transfer, not once per drained word.
      * Raising it on every RXDATA read kept the interrupt line asserted after the
