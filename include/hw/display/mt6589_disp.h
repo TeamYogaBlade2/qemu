@@ -38,6 +38,13 @@ typedef struct Mt6589DispBlock {
     size_t nregs;
     bool has_irq;
     int irq_spi;
+    /*
+     * A block whose every register is plain storage - no self-clearing triggers, no
+     * status-only reads. The DDP routing block is one: 48 registers that the driver
+     * read-modify-writes, and a table that lists them would be a copy of the header for
+     * no benefit. Setting this makes any offset in the 4 KiB window a 32-bit store.
+     */
+    bool generic_regs;
 } Mt6589DispBlock;
 
 struct Mt6589DispBlockState {
@@ -70,6 +77,13 @@ struct Mt6589DispBlockState {
      */
     QEMUTimer vsync_timer;
     uint32_t vsync_count;
+    /*
+     * The OVL is the composer, but the read DMA is a separate block instance and is what
+     * the kernel actually drives. The composer needs to see it, so create() links the two.
+     */
+    struct Mt6589DispBlockState *rdma;
+    /* The DDP routing block (0x1400_0000): decides which source reaches the panel. */
+    struct Mt6589DispBlockState *config;
 };
 
 /* Create and map OVL, RDMA, COLOR and MUTEX. */

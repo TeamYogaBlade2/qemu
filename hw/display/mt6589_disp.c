@@ -498,6 +498,16 @@ static const Mt6589DispReg mt6589_gamma_regs[] = {
 };
 
 static const Mt6589DispBlock mt6589_disp_blocks[] = {
+    /*
+     * DISPSYS_CONFIG at 0x1400_0000 - the DDP routing table. This is where the path is
+     * actually wired: OVL_MOUT_EN decides which consumer the overlay feeds, RDMA0_OUT_SEL
+     * and COLOR_SEL/TDSHP_SEL/BLS_SEL/DPI0_SEL chain the following stages, and OVL_SEL
+     * chooses the overlay's own source. Everything here is read-modify-write storage
+     * (the driver sets and clears bits), so leaving the block unmapped meant every read
+     * came back 0 and the driver's own view of the route drifted from what it wrote.
+     * The generated header mt6589-dispsys_config-regs.h lists the 48 registers.
+     */
+    { "config", 0x14000000, NULL, 0, false, 0, true },
     BLOCK("ovl",   0x14003000, mt6589_ovl_regs,   163),
     BLOCK("rdma",  0x14006000, mt6589_rdma_regs,  0),
     BLOCK("color", 0x1400a000, mt6589_color_regs, 0),
@@ -524,6 +534,12 @@ static bool mt6589_disp_log_enabled(void)
 static const Mt6589DispReg *find_reg(const Mt6589DispBlock *b,
                                             hwaddr offset)
 {
+    static const Mt6589DispReg plain = { 0, 0, 0 };
+
+    if (b->generic_regs) {
+        /* Storage only: see the comment on the block's description. */
+        return (offset < 0x1000) ? &plain : NULL;
+    }
     for (size_t i = 0; i < b->nregs; i++) {
         if (b->regs[i].offset == offset) {
             return &b->regs[i];
@@ -646,6 +662,90 @@ static void mt6589_disp_dump(Mt6589DispBlockState *s, DisplaySurface *surface,
     rename(tmp, path);
 }
 
+/*
+ * The kernel's path is not the same as LK's. LK drives the OVL layers and leaves the RDMA
+ * alone; the kernel configures the read DMA instead -
+ *
+ *     RDMA: w=1280, h=800, addr=0, pitch=3840, mode=0
+ *
+ * (ddp_rdma.c) - so a composer that only understands OVL layers shows nothing once the
+ * kernel takes over. Both are rendered here: whichever has an address and a pitch is
+ * what the panel would be showing.
+ */
+static bool mt6589_disp_render_fb(Mt6589DispBlockState *s, hwaddr addr,
+                                  uint32_t pitch, uint32_t size,
+                                  uint32_t *dst, int stride_bytes, int dw, int dh)
+{
+    uint8_t line[4096 * 4];
+    int lw = size & 0xffff;
+    int lh = size >> 16;
+    int bpp;
+
+    if (!addr || !pitch) {
+        return false;
+    }
+    if (!lw || !lh) {
+        lw = dw;
+        lh = dh;
+    }
+    bpp = pitch / lw;
+    if (bpp < 1 || bpp > 4) {
+        return false;
+    }
+    lw = MIN(lw, dw);
+    lh = MIN(lh, dh);
+    lw = MIN(lw, (int)(sizeof(line) / bpp));
+    for (int y = 0; y < lh; y++) {
+        uint32_t *d = (uint32_t *)((uint8_t *)dst + (size_t)y * stride_bytes);
+
+        if (address_space_read(&address_space_memory, addr + (hwaddr)y * pitch,
+                               MEMTXATTRS_UNSPECIFIED, line,
+                               (hwaddr)lw * bpp) != MEMTX_OK) {
+            return false;
+        }
+        for (int x = 0; x < lw; x++) {
+            d[x] = mt6589_disp_cvt_pixel(line + x * bpp, bpp);
+        }
+    }
+    return true;
+}
+
+/*
+ * Which source reaches the panel.
+ *
+ * DDP is a mux, not a fixed pipeline: DISP_OVL_MOUT_EN says where the overlay's output
+ * goes, COLOR_MOUT_EN where the colour engine's goes, and so on, with BLS_SEL and DPI0_SEL
+ * picking the last stage. The values are documented where the driver writes them
+ * (ddp_path.c):
+ *
+ *     OVL_MOUT_EN |= 0x1     "ovl_mout output to bls"
+ *     OVL_MOUT_EN  = 0x4     "ovl_mout output to COLOR"
+ *     COLOR_MOUT_EN = 0x8    "color_mout output to BLS"
+ *     TDSHP_MOUT_EN = 0x10   "tdshp_mout output to OVL directlink"
+ *
+ * and the measurement of what this kernel actually programs agrees with the second and
+ * third of those (OVL_MOUT_EN = 0x4, COLOR_MOUT_EN = 0x8), i.e. the visible path here is
+ * OVL -> COLOR -> BLS. So the overlay is what the panel shows, and the read DMA is only
+ * the source when the route says so.
+ */
+static bool mt6589_disp_route_is_ovl(Mt6589DispBlockState *ovl)
+{
+    Mt6589DispBlockState *cfg = ovl->config;
+    uint32_t ovl_mout, color_mout;
+
+    if (!cfg) {
+        return true;            /* no routing modelled: the overlay is the default */
+    }
+    ovl_mout = cfg->regs[0x0024 >> 2];
+    color_mout = cfg->regs[0x0028 >> 2];
+
+    if (!ovl_mout && !color_mout) {
+        return true;            /* nothing programmed yet: the overlay is the default */
+    }
+    /* OVL straight to BLS, or OVL -> COLOR -> BLS. */
+    return (ovl_mout & 0x1u) || ((ovl_mout & 0x4u) && (color_mout & 0x8u));
+}
+
 static void mt6589_ovl_compose(Mt6589DispBlockState *s)
 {
     DisplaySurface *surface;
@@ -711,7 +811,24 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
         }
     }
 
-    for (int n = 0; n < OVL_NUM_LAYERS; n++) {
+    bool from_ovl = mt6589_disp_route_is_ovl(s);
+
+    /*
+     * A route that selects a source with nothing behind it falls back to the other one:
+     * the point of this model is to show what the panel would show, and a driver that has
+     * not finished programming the route should not produce a blank screen.
+     */
+    if (!from_ovl) {
+        bool rdma_ready = s->rdma &&
+            (s->rdma->regs[RDMA(DISP_RDMA_GLOBAL_CON) >> 2] & 1u) &&
+            s->rdma->regs[RDMA(DISP_RDMA_MEM_START_ADDR) >> 2];
+
+        if (!rdma_ready) {
+            from_ovl = true;
+        }
+    }
+
+    for (int n = 0; from_ovl && n < OVL_NUM_LAYERS; n++) {
         hwaddr addr = s->regs[OVL_L_ADDR(n) >> 2];
         uint32_t pitch = s->regs[OVL_L_PITCH(n) >> 2];
         uint32_t size = s->regs[OVL_L_SIZE(n) >> 2];
@@ -753,6 +870,25 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
                 d[x] = mt6589_disp_cvt_pixel(line + x * bpp, bpp);
             }
         }
+    }
+
+    /*
+     * The read DMA, if the guest is driving that path instead of the overlay. This is
+     * what the kernel configures, and its output is the whole frame, so it is drawn last.
+     */
+    if (!from_ovl && s->rdma && (s->rdma->regs[RDMA(DISP_RDMA_GLOBAL_CON) >> 2] & 1u)) {
+        hwaddr addr = s->rdma->regs[RDMA(DISP_RDMA_MEM_START_ADDR) >> 2];
+        uint32_t pitch = s->rdma->regs[RDMA(DISP_RDMA_MEM_SRC_PITCH) >> 2];
+        uint32_t size = (s->rdma->regs[RDMA(DISP_RDMA_SIZE_CON_0) >> 2] & 0xffff) |
+                        ((s->rdma->regs[RDMA(DISP_RDMA_SIZE_CON_1) >> 2] & 0xffff) << 16);
+
+        mt6589_disp_render_fb(s->rdma, addr, pitch, size, dst, stride, w, h);
+    }
+
+    if (mt6589_disp_log_enabled() && (s->frame_count % 200) == 0) {
+        fprintf(stderr, "DISP frame %u: %dx%d first pixel %08" PRIx32
+                " layer-addr %08" PRIx32 "\n", s->frame_count, w, h, dst[0],
+                (uint32_t)s->regs[OVL_L_ADDR(0) >> 2]);
     }
     mt6589_disp_dump(s, surface, w, h);
     qemu_console_update(s->con, 0, 0, w, h);
@@ -1150,6 +1286,10 @@ DEFINE_TYPES(mt6589_disp_types)
 /* Create and map every display block. Called from the SoC. */
 void mt6589_disp_create(Mt6589State *soc, DeviceState *gic)
 {
+    Mt6589DispBlockState *ovl = NULL;
+    Mt6589DispBlockState *rdma = NULL;
+    Mt6589DispBlockState *cfg = NULL;
+
     for (size_t i = 0; i < ARRAY_SIZE(mt6589_disp_blocks); i++) {
         const Mt6589DispBlock *b = &mt6589_disp_blocks[i];
         Mt6589DispBlockState *s =
@@ -1178,5 +1318,21 @@ void mt6589_disp_create(Mt6589State *soc, DeviceState *gic)
             sysbus_connect_irq(SYS_BUS_DEVICE(s), 0,
                                qdev_get_gpio_in(gic, MT6589_GIC_GPIO(b->irq_spi)));
         }
+        if (b->base == 0x14003000) {
+            ovl = s;
+        } else if (b->base == 0x14000000) {
+            cfg = s;
+        } else if (b->base == 0x14006000) {
+            rdma = s;
+        }
+    }
+
+    /*
+     * The composer needs the read DMA's registers and the routing table; see
+     * mt6589_ovl_compose() and mt6589_disp_route_is_ovl().
+     */
+    if (ovl) {
+        ovl->rdma = rdma;
+        ovl->config = cfg;
     }
 }
