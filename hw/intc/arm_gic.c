@@ -1657,6 +1657,32 @@ static MemTxResult gic_cpu_read(GICState *s, int cpu, int offset,
     case 0x0c: /* Acknowledge */
         *data = gic_acknowledge_irq(s, cpu, attrs);
         break;
+    /*
+     * MT6589's GIC has the v1-style aliased acknowledge/EOI pair, and the kernel
+     * uses it whenever CONFIG_FIQ is set:
+     *
+     *     mediatek/.../include/mach/entry-macro.S:
+     *     #ifdef CONFIG_FIQ
+     *         ldr \irqstat, [\base, #GIC_CPU_AIAR]
+     *     #else
+     *         ldr \irqstat, [\base, #GIC_CPU_INTACK]
+     *     #endif
+     *
+     * with GIC_CPU_AIAR = 0x20 and GIC_CPU_AEOI = 0x24 in the kernel's gic.h
+     * (0x0c/0x10 are INTACK/EOI). Neither offset was implemented here, so the
+     * read returned 0 - and 0 is not "no interrupt" to this kernel:
+     * get_irqnr_and_base only accepts >= 27 (or FIQ_DBG_SGI) as a real IRQ, and
+     * test_for_ipi then sees the same 0, decides it is IPI 0 and calls do_IPI(0).
+     * Measured: do_IPI entered with r2 == 0 and "CPU0: Unknown IPI message 0x0"
+     * printed for every interrupt, while the real interrupt was never
+     * acknowledged - so its level stayed asserted and the storm never ended.
+     */
+    case 0x20: /* Aliased Acknowledge */
+        *data = gic_acknowledge_irq(s, cpu, attrs);
+        break;
+    case 0x24: /* Aliased End Of Interrupt (write-only) */
+        *data = 0;
+        break;
     case 0x14: /* Running Priority */
         *data = gic_get_running_priority(s, cpu, attrs);
         break;
@@ -1752,6 +1778,9 @@ static MemTxResult gic_cpu_write(GICState *s, int cpu, int offset,
         }
         break;
     case 0x10: /* End Of Interrupt */
+        gic_complete_irq(s, cpu, value & 0x3ff, attrs);
+        return MEMTX_OK;
+    case 0x24: /* Aliased End Of Interrupt - see the AIAR note in gic_cpu_read */
         gic_complete_irq(s, cpu, value & 0x3ff, attrs);
         return MEMTX_OK;
     case 0x1c: /* Aliased Binary Point */
