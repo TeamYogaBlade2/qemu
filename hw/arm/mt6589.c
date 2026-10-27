@@ -279,6 +279,18 @@ static void mt6589_gpt_write(void *opaque, hwaddr offset, uint64_t value,
                     qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
                 s->gpt_chan[n].frozen_count = 0;
                 s->gpt_irqsta &= ~MT6589_GPT_IRQ_BIT(n);
+            } else if (!(value & MT6589_GPT_CON_EN)) {
+                /*
+                 * Stopping a channel also drops its request. GPT_IRQSTA is sticky
+                 * and normally only GPT_IRQACK clears it, but leaving a status bit
+                 * set on a channel the guest has just disabled is what livelocked
+                 * this boot: measured, the kernel stopped GPT1 (CON=0) while
+                 * IRQSTA bit 0 stayed set and IRQEN bit 0 was still enabled, so the
+                 * level-triggered line stayed asserted, the CPU sat in the IRQ
+                 * vector at 0xffff0018, and no printk ever appeared again because
+                 * nothing in the handler acknowledged a timer it had just stopped.
+                 */
+                s->gpt_irqsta &= ~MT6589_GPT_IRQ_BIT(n);
             } else if ((s->gpt_chan[n].con & MT6589_GPT_CON_EN) &&
                        !(value & MT6589_GPT_CON_EN)) {
                 /* Disabling freezes the counter where it stands. */
