@@ -330,6 +330,12 @@ struct Mt6589State {
      */
     uint32_t topaxi_prot_en;
     uint32_t topaxi_si0_ctl;
+    /*
+     * M4U (the display/camera IOMMU) at 0x1020_5000..0x1020_5fff: the global block
+     * at +0x000, its L2 at +0x100, and one register file per M4U at +0x200 and
+     * +0x800. Only the TLB-invalidate handshake is behavioural; the rest is storage.
+     */
+    uint32_t m4u_regs[0x400];
     uint32_t gpt_irqsta;
     struct {
         uint32_t con;

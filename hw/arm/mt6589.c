@@ -708,6 +708,24 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
     case 0x1228:
         return s->topaxi_prot_en;
     }
+
+    /*
+     * M4U at 0x1020_5000: global registers at +0x000, the L2 at +0x100, and one
+     * register file per M4U instance at +0x200 and +0x800.
+     *
+     * The completion bits are what matter. Every TLB invalidation ends with a poll:
+     *
+     *     COM_WriteReg32(REG_MMUg_INVLD, F_MMUg_INV_ALL);
+     *     while (!(m4uHw_get_field_by_mask(0, REG_L2_GDC_STATE,
+     *                                      F_L2_GDC_ST_EVENT_MSK))) { }
+     *
+     * (m4u.c, m4u_invalid_tlb) - and with the whole block unmodelled that loop never
+     * ends: measured, the guest clock froze at 2.473s with CPU2 spinning at 0xc04c9568
+     * inside m4u_invalid_tlb while the other three CPUs sat in wfi.
+     */
+    if (offset >= 0x205000 && offset < 0x206000) {
+        return s->m4u_regs[(offset - 0x205000) / 4];
+    }
     if (offset == 0x660c || offset == 0x6610) {   /* SPM_PWR_STATUS(_S) */
         /*
          * The modem is reported off and everything else on. That is the state the
@@ -833,6 +851,28 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
         return;
     case 0x1228:
         /* Status is not writable; writes are ignored, as on hardware. */
+        return;
+    }
+
+    /*
+     * M4U - see mt6589_peri_read(). An invalidation completes immediately here: this
+     * model has no TLB to search, so the honest completion time is zero, and the
+     * status bits the driver polls are raised (and, because the driver clears them by
+     * writing 0, cleared) the same way hardware would.
+     *
+     *   REG_MMUg_INVLD       global + 0x04   bit 0 = invalidate range, bit 1 = all
+     *   REG_L2_GDC_STATE     L2     + 0x00   event field in bits 7:6
+     *   REG_L2_GPE_STATUS    L2     + 0x18   bit 0 = prefetch done, bit 1 = range done
+     */
+    if (offset >= 0x205000 && offset < 0x206000) {
+        hwaddr idx = (offset - 0x205000) / 4;
+        bool invalidate = ((offset & 0xff) == 0x04) && ((uint32_t)value & 0x3u);
+
+        s->m4u_regs[idx] = (uint32_t)value;
+        if (invalidate) {
+            s->m4u_regs[0x100 / 4] |= 0x3u << 6;       /* GDC_STATE event */
+            s->m4u_regs[(0x100 + 0x18) / 4] |= 0x3u;   /* GPE_STATUS done bits */
+        }
         return;
     }
 
