@@ -47,6 +47,7 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/log.h"
+#include "target/arm/cpu.h"
 #include "qemu/module.h"
 #include "qemu/timer.h"
 #include "hw/arm/mt6589.h"
@@ -1007,7 +1008,10 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
         read_log = getenv("MT6589_DISP_READ_LOG") != NULL;
     }
     if (read_log) {
-        fprintf(stderr, "DISP %-5s R %04" HWADDR_PRIx "\n", s->desc->name, offset);
+        uint32_t pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
+
+        fprintf(stderr, "DISP %-5s R %04" HWADDR_PRIx " pc=%08" PRIx32 "\n",
+                s->desc->name, offset, pc);
     }
     const Mt6589DispReg *r = find_reg(s->desc, offset);
 
