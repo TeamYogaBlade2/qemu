@@ -318,6 +318,18 @@ struct Mt6589State {
     uint32_t spm_pwr_con[16];
     /* SPM_PWR_STATUS(_S): one bit per MTCMOS domain, MD1 (bit 0) off. */
     uint32_t spm_status;
+    /*
+     * INFRACFG AXI protection. The MTCMOS code brackets every domain power
+     * transition with it:
+     *
+     *     spm_write(TOPAXI_PROT_EN, ... | MFG_PROT_MASK);
+     *     while ((spm_read(TOPAXI_PROT_STA1) & MFG_PROT_MASK) != MFG_PROT_MASK) { }
+     *
+     * INFRACFG is 0x1000_1000, so those reach the peripheral region as offsets
+     * 0x1220 and 0x1228. Leaving STA1 at zero spins that loop for ever.
+     */
+    uint32_t topaxi_prot_en;
+    uint32_t topaxi_si0_ctl;
     uint32_t gpt_irqsta;
     struct {
         uint32_t con;

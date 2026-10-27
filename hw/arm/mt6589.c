@@ -47,6 +47,7 @@
 #include "system/system.h"
 #include "hw/core/loader.h"
 #include "qemu/units.h"
+#include "target/arm/cpu.h"
 
 /*
  * The GPT tick. The datasheet's counters are clocked from the 13 MHz system
@@ -547,9 +548,63 @@ static const MemoryRegionOps mt6589_chipid_ops = {
  * where the generated map knows it, otherwise 0; writes are ignored. Anything
  * logged here is a register whose behaviour is still missing.
  */
+static bool mt6589_mfg_log_enabled(void)
+{
+    static int enabled = -1;
+
+    if (enabled < 0) {
+        enabled = getenv("MT6589_MFG_LOG") != NULL;
+    }
+    return enabled;
+}
+
+/*
+ * The GPU register window is at 0x1300_0000 (docs/sgx544: "64 KiB register window"),
+ * which lies in the HIGH peri region - the one based at 0x1200_0000 - so a GPU access
+ * reaches these handlers as 0x0100_0000 + x, not 0x0300_0000 + x. Both offsets are
+ * mapped to the same window because the two regions share these handlers.
+ *
+ * Getting this wrong is why an earlier trace reported "zero GPU accesses" and a
+ * conclusion was drawn from it: the condition could never have matched.
+ */
+static hwaddr mt6589_mfg_rel(hwaddr offset)
+{
+    if (offset >= 0x01000000 && offset < 0x01010000) {
+        return offset - 0x01000000;
+    }
+    if (offset >= 0x03000000 && offset < 0x03010000) {
+        return offset - 0x03000000;
+    }
+    return (hwaddr)-1;
+}
+
 static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 {
     Mt6589State *s = opaque;
+
+    /*
+     * MT6589_MFG_LOG=1 traces the GPU's register window (0x1300_0000, i.e. this
+     * region's offset 0x0300_0000). The GPU is out of scope here, but what the
+     * driver does to it is not: the boot currently stops with everything asleep, and
+     * the only way to know whether that is a poll this model answers wrongly or a
+     * wait for an interrupt nobody raises is to see the traffic.
+     */
+    if (mt6589_mfg_log_enabled()) {
+        hwaddr rel = mt6589_mfg_rel(offset);
+
+        if (rel != (hwaddr)-1) {
+            /*
+             * The guest PC is included because a bare offset does not say WHERE the
+             * access came from, and a register the driver polls in a loop is exactly
+             * the case where the caller has to be found: searching the kernel image
+             * for the window's base address finds nothing, because ARM builds it from
+             * a movw/movt pair rather than a literal.
+             */
+            uint32_t pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
+
+            fprintf(stderr, "MFG R %05" HWADDR_PRIx " pc=%08" PRIx32 "\n", rel, pc);
+        }
+    }
 
     /*
      * Poll detector. A driver that waits for a status bit this model never sets
@@ -617,6 +672,26 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 
         return stored | 0xeu | ((stored & 0xf00u) ? 0xf000u : 0);
     }
+
+    /*
+     * INFRACFG AXI protection (INFRACFG_BASE = 0xF000_1000 -> 0x1000_1000, so these
+     * are offsets 0x1200/0x1220/0x1228 here).
+     *
+     * PROT_STA1 reports which masters have actually gone idle behind the protection
+     * PROT_EN asked for. Applying it immediately is the whole point of the model: the
+     * MTCMOS power sequences poll the status to know when the bus is quiescent, and
+     * with the status stuck at zero spm_mtcmos_ctrl_mfg() never returns - measured as
+     * CPU0 spinning at 0xc0030f94 inside that function while the other three CPUs sat
+     * in go_to_rgidle's wfi, which is what made the boot look hung rather than stalled.
+     */
+    switch (offset) {
+    case 0x1200:
+        return s->topaxi_si0_ctl;
+    case 0x1220:
+        return s->topaxi_prot_en;
+    case 0x1228:
+        return s->topaxi_prot_en;
+    }
     if (offset == 0x660c || offset == 0x6610) {   /* SPM_PWR_STATUS(_S) */
         /*
          * The modem is reported off and everything else on. That is the state the
@@ -682,6 +757,15 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
 {
     Mt6589State *s = opaque;
 
+    if (mt6589_mfg_log_enabled()) {
+        hwaddr rel = mt6589_mfg_rel(offset);
+
+        if (rel != (hwaddr)-1) {
+            fprintf(stderr, "MFG W %05" HWADDR_PRIx " = %08" PRIx32 "\n",
+                    rel, (uint32_t)value);
+        }
+    }
+
     /* SPM MTCMOS power-control registers - see mt6589_peri_read(). */
     if (offset >= 0x6200 && offset < 0x62a0) {
         /*
@@ -720,6 +804,19 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
                 break;
             }
         }
+        return;
+    }
+
+    /* INFRACFG AXI protection - see mt6589_peri_read(). */
+    switch (offset) {
+    case 0x1200:
+        s->topaxi_si0_ctl = (uint32_t)value;
+        return;
+    case 0x1220:
+        s->topaxi_prot_en = (uint32_t)value;
+        return;
+    case 0x1228:
+        /* Status is not writable; writes are ignored, as on hardware. */
         return;
     }
 
