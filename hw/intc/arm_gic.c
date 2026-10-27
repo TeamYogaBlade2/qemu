@@ -449,9 +449,21 @@ static uint16_t gic_get_current_pending_irq(GICState *s, int cpu,
             /* Group0 interrupts hidden from Non-secure access */
             return 1023;
         }
-        if (group == 1 && secure && !(s->cpu_ctlr[cpu] & GICC_CTLR_ACK_CTL)) {
+        if (group == 1 && secure && !(s->cpu_ctlr[cpu] & GICC_CTLR_ACK_CTL)
+            && s->security_extn) {
             /* Group1 interrupts only seen by Secure access if
              * AckCtl bit set.
+             *
+             * The s->security_extn guard is this tree's addition. A GIC that
+             * reports no security extensions should not hide anything by group,
+             * but QEMU models groups for every GICv2 - and MT6589 guests program
+             * their interrupts into group 1 (GICD_IGROUPR = 0xff for IRQ 145)
+             * because the real part does have the extensions. On a machine that
+             * boots in secure state with no secure firmware - like this one -
+             * that combination made gic_get_current_pending_irq() answer 1022
+             * for every interrupt: pending and enabled, never dispatched, so the
+             * timer's status was never acknowledged and calibrate_delay() never
+             * saw a jiffy.
              */
             return 1022;
         }
