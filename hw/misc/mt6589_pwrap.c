@@ -138,6 +138,38 @@ struct Mt6589PwrapDefault {
 static const struct Mt6589PwrapDefault mt6589_pmic_defaults[] = {
     /* PMIC 0xBC0A -> 0x5E05: the link read test, fixed value. */
     { 0x5E05, 0x5AA5 },
+
+    /*
+     * The PMIC's auxiliary ADC channels (AUXADC_ADC0..ADC9 at 0x0512..0x0524, so
+     * wire addresses 0x0289..0x0292).
+     *
+     * Each channel register is bit 15 = ready and bits 9:0 = the 10-bit code
+     * (PMIC_RG_ADC_RDY_Cn_SHIFT 15, PMIC_RG_ADC_OUT_Cn_SHIFT 0). With no default
+     * they read 0, which means "conversion not ready" for ever, and the PMIC
+     * thermal and battery code retries indefinitely:
+     *
+     *     [PWRAP] index=76..79 ... addr=51a
+     *     [PWRAP] ERROR,line=357 wait_for_fsm_idle fail,return_value=9
+     *     [PWRAP] ERROR,line=388 timeout:BUG_ON here
+     *     [Power/PMIC] [pmic_read_interface] Reg[51a]= pmic_wrap read data fail
+     *     [THERMAL/MONITOR] thermal_zone_bind_cooling_device Fail. Code(-22)
+     *
+     * measured. Reporting ready with a mid-scale code is the honest model of an ADC
+     * with nothing connected to it: the conversion has completed and the answer is
+     * unremarkable, which is what a board sitting at room temperature looks like. The
+     * SoC-side AUXADC at 0x1100_1000 is modelled separately and carries the battery
+     * and charger values the drivers actually act on.
+     */
+    { 0x0289, 0x8000 | 0x200 },     /* AUXADC_ADC0 */
+    { 0x028A, 0x8000 | 0x200 },     /* AUXADC_ADC1 */
+    { 0x028B, 0x8000 | 0x200 },     /* AUXADC_ADC2 */
+    { 0x028C, 0x8000 | 0x200 },     /* AUXADC_ADC3 */
+    { 0x028D, 0x8000 | 0x200 },     /* AUXADC_ADC4 */
+    { 0x028E, 0x8000 | 0x200 },     /* AUXADC_ADC5 */
+    { 0x028F, 0x8000 | 0x200 },     /* AUXADC_ADC6 */
+    { 0x0290, 0x8000 | 0x200 },     /* AUXADC_ADC7 */
+    { 0x0291, 0x8000 | 0x200 },     /* AUXADC_ADC8 */
+    { 0x0292, 0x8000 | 0x200 },     /* AUXADC_ADC9 */
     /*
      * PMIC 0x0300 chip ID -> 0x0180. The MT6320 answers 0x2020 on this board
      * (operator's hardware, E2 silicon). Without a chip ID the kernel's
@@ -251,6 +283,16 @@ static const struct Mt6589PwrapDefault mt6589_pmic_defaults[] = {
 
 /* Store the PMIC-side register file. Indexed by WACS number (address >> 1). */
 #define PMIC_NUM_REGS 0x8000
+
+static bool mt6589_pwrap_log_enabled(void)
+{
+    static int enabled = -1;
+
+    if (enabled < 0) {
+        enabled = getenv("MT6589_PWRAP_LOG") != NULL;
+    }
+    return enabled;
+}
 
 static void mt6589_pwrap_reset(DeviceState *dev)
 {
@@ -425,6 +467,17 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
     Mt6589PwrapState *s = opaque;
     uint32_t cmd = (uint32_t)value;
     uint16_t wacs = (cmd >> CMD_ADDR_SHIFT) & 0x7fff;
+
+    /*
+     * MT6589_PWRAP_LOG=1 traces the transaction register pair. A stuck wrapper is
+     * diagnosed by what the guest wrote and in what order, not by guessing at the
+     * state machine: the guest's protocol is fixed, so an access that never completes
+     * is either a command the model answered wrongly or a clear the model did not see.
+     */
+    if (mt6589_pwrap_log_enabled()) {
+        fprintf(stderr, "PWRAP W off=%02" HWADDR_PRIx " val=%08" PRIx32
+                " fsm=%u\n", offset, cmd, s->fsm);
+    }
 
     switch (offset) {
     case R_CMD:
