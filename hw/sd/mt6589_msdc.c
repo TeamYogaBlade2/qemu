@@ -425,6 +425,22 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
     uint32_t opcode = cmd & 0x3f;
     bool has_data = ((cmd & SDC_CMD_DTYPE_MASK) >> SDC_CMD_DTYPE_SHIFT) !=
                     SDC_CMD_DTYPE_NONE;
+    /*
+     * Clear the previous command's result bits before reporting this one.
+     *
+     * These are per-command status, not sticky flags: CMDRDY says "the command I
+     * just issued finished". Leaving it set means the next command's wait sees
+     * CMDRDY together with an error bit, and the drivers test the error in an
+     * `else if` chain after the success case (preloader msdc.c:1055), so a
+     * genuine CMDTMO is silently ignored.
+     *
+     * Measured before this fix: CMD55 set MSDC_INT_CMDTMO but the guest read
+     * 0x300 - the stale CMDRDY from the previous command plus the new timeout -
+     * and neither LK nor the preloader took its error branch, so neither ever
+     * fell back from ACMD41 to CMD1.
+     */
+    s->int_status &= ~(MSDC_INT_CMDRDY | MSDC_INT_CMDTMO | MSDC_INT_RSPCRCERR |
+                       MSDC_INT_ACMDRDY | MSDC_INT_ACMDTMO);
     bool is_write = (cmd & SDC_CMD_RW) != 0;
 
     s->sdc_sts &= ~0x1u;   /* SDC_STS.BUSY clear: the command finished */
