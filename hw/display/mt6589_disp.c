@@ -48,10 +48,13 @@
 #include "qapi/error.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
+#include "qemu/timer.h"
 #include "hw/arm/mt6589.h"
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
+#include "system/address-spaces.h"
 #include "system/memory.h"
+#include "ui/console.h"
 
 
 /* ------------------------------------------------------------------------- */
@@ -60,21 +63,68 @@
  * OVL_STA's RDMA-idle bits are what the DRM driver's atomic commit waits on.
  * Reporting them as 0 makes the commit wait for a pipeline that never drains.
  */
+/*
+ * The layer layout below is MEASURED, not guessed. Setting MT6589_DISP_LOG=1 and
+ * booting LK gives the exact sequence its display driver programs, and it does not
+ * match the offsets that were assumed from the block diagram:
+ *
+ *     DISP ovl W 0020 = 03200500     ROI size, h<<16 | w = 0x320 x 0x500 = 800x1280
+ *     DISP ovl W 0070 = 00001000     layer 1 CON
+ *     DISP ovl W 0078 = 03200500     layer 1 size
+ *     DISP ovl W 0080 = bf600000     layer 1 address
+ *     DISP ovl W 0084 = 00000a00     layer 1 pitch  (0xa00 / 0x500 = 2 bytes/pixel)
+ *     DISP ovl W 0090 = 40000000     layer 2 CON
+ *     DISP ovl W 0094 = ff000000     layer 2 key/alpha
+ *     DISP ovl W 00a0 = bf7f4000     layer 2 address (exactly one 1280x800x2 frame on)
+ *     DISP ovl W 00a4 = 00000a00     layer 2 pitch
+ *     DISP ovl W 000c = 00000001     OVL_EN
+ *
+ * So layers live at 0x50 + n*0x20 with CON, ALPHA/KEY, SIZE, OFFSET, ADDR, PITCH at
+ * +0x00, +0x04, +0x08, +0x0c, +0x10, +0x14. Every one of those offsets has to be
+ * in this table, because the write path stores only registers it knows and drops
+ * the rest - which is exactly how the earlier table lost the layer addresses and
+ * left this block unable to render anything.
+ */
+#define OVL_L(n, o)  (0x50 + (n) * 0x20 + (o))
+
 static const Mt6589DispReg mt6589_ovl_regs[] = {
-    { 0x0000, 0x0000001f, MREG_IDLE },  /* OVL_STA: all RDMA idle bits set */
+    { 0x0000, 0x0000001f, MREG_IDLE },  /* OVL_STA: RDMA idle bits */
+    { 0x0004, 0, 0 },                   /* OVL_CON / layer enable */
     { 0x000c, 0, 0 },                   /* OVL_EN */
     { 0x0010, 0, MREG_SELFCL },         /* OVL_TRIG */
     { 0x0014, 0, MREG_SELFCL },         /* OVL_RST */
     { 0x0020, 0, 0 },                   /* OVL_ROI_SIZE */
+    { 0x0028, 0, 0 },                   /* OVL_DATAPATH_CON */
     { 0x002c, 0, 0 },                   /* OVL_SRC_CON */
-    { 0x0034, 0, 0 },                   /* OVL_DATAPATH_CON */
     { 0x0038, 0, 0 },                   /* OVL_ROI_BGCLR */
-    { 0x003c, 0, 0 },                   /* OVL_SRC_KEY_CON */
-    { 0x0040, 0, 0 },                   /* OVL_SRC_KEY_ALPHA */
-    { 0x0044, 0, 0 },                   /* OVL_L0_PITCH */
-    { 0x0064, 0, 0 },                   /* OVL_L1_PITCH */
-    { 0x0084, 0, 0 },                   /* OVL_L2_PITCH */
-    { 0x00a4, 0, 0 },                   /* OVL_L3_PITCH */
+    { OVL_L(0, 0x00), 0, 0 },           /* L0 CON */
+    { OVL_L(0, 0x04), 0, 0 },           /* L0 ALPHA/KEY */
+    { OVL_L(0, 0x08), 0, 0 },           /* L0 SIZE */
+    { OVL_L(0, 0x0c), 0, 0 },           /* L0 OFFSET */
+    { OVL_L(0, 0x10), 0, 0 },           /* L0 ADDR */
+    { OVL_L(0, 0x14), 0, 0 },           /* L0 PITCH */
+    { OVL_L(1, 0x00), 0, 0 },           /* L1 CON */
+    { OVL_L(1, 0x04), 0, 0 },
+    { OVL_L(1, 0x08), 0, 0 },
+    { OVL_L(1, 0x0c), 0, 0 },
+    { OVL_L(1, 0x10), 0, 0 },
+    { OVL_L(1, 0x14), 0, 0 },
+    { OVL_L(2, 0x00), 0, 0 },           /* L2 CON */
+    { OVL_L(2, 0x04), 0, 0 },
+    { OVL_L(2, 0x08), 0, 0 },
+    { OVL_L(2, 0x0c), 0, 0 },
+    { OVL_L(2, 0x10), 0, 0 },
+    { OVL_L(2, 0x14), 0, 0 },
+    { OVL_L(3, 0x00), 0, 0 },           /* L3 CON */
+    { OVL_L(3, 0x04), 0, 0 },
+    { OVL_L(3, 0x08), 0, 0 },
+    { OVL_L(3, 0x0c), 0, 0 },
+    { OVL_L(3, 0x10), 0, 0 },
+    { OVL_L(3, 0x14), 0, 0 },
+    { 0x0100, 0, 0 },                   /* per-layer extension control */
+    { 0x0120, 0, 0 },
+    { 0x0140, 0, 0 },
+    { 0x0160, 0, 0 },
 };
 
 /* ------------------------------------------------------------------------- */
@@ -91,8 +141,16 @@ static const Mt6589DispReg mt6589_rdma_regs[] = {
     { 0x0018, 0, 0 },                   /* SIZE_CON_1 */
     { 0x001c, 0, 0 },                   /* TARGET_LINE */
     { 0x0024, 0, 0 },                   /* MEM_CON */
-    { 0x0040, 0, 0 },                   /* MEM_START_ADDR */
-    { 0x0044, 0, 0 },                   /* MEM_SRC_PITCH */
+    /*
+     * Measured from LK: it writes the source address to 0x0028 and the pitch to
+     * 0x002c, not 0x0040/0x0044. With those two offsets absent the address was
+     * dropped, which is why the RDMA side of this model could never have rendered
+     * anything even if it had had a framebuffer to read.
+     */
+    { 0x0028, 0, 0 },                   /* MEM_START_ADDR */
+    { 0x002c, 0, 0 },                   /* MEM_SRC_PITCH */
+    { 0x0040, 0, 0 },                   /* shadow register set */
+    { 0x0044, 0, 0 },
     { 0x0048, 0, 0 },                   /* MEM_GMC_SETTING_0 */
     { 0x004c, 0, 0 },                   /* MEM_GMC_SETTING_1 */
     { 0x0050, 0, 0 },                   /* MEM_SLOW_CON */
@@ -430,6 +488,16 @@ static const Mt6589DispBlock mt6589_disp_blocks[] = {
 
 /* ------------------------------------------------------------------------- */
 
+static bool mt6589_disp_log_enabled(void)
+{
+    static int enabled = -1;
+
+    if (enabled < 0) {
+        enabled = getenv("MT6589_DISP_LOG") != NULL;
+    }
+    return enabled;
+}
+
 static const Mt6589DispReg *find_reg(const Mt6589DispBlock *b,
                                             hwaddr offset)
 {
@@ -440,6 +508,277 @@ static const Mt6589DispReg *find_reg(const Mt6589DispBlock *b,
     }
     return NULL;
 }
+
+/* ========================================================================== */
+/* OVL scanout: real pixels into a QEMU console                               */
+/*
+ * The composer is the one part of this subsystem whose RESULT can be checked, so it
+ * is the one part that is modelled rather than stored: on every frame the enabled
+ * layers are read out of guest memory and blitted into a display surface, which is
+ * what a panel would be showing. Without it the model can only prove the guest
+ * programmed the right registers, not that anything comes out - and "the backlight
+ * lights but the screen is black" is exactly the class of bug that needs the second
+ * kind of proof.
+ *
+ * Format is derived from the geometry the guest wrote rather than from a format
+ * field, because that is unambiguous: LK's layer has pitch 0xa00 for a width of
+ * 0x500, so 2 bytes per pixel, i.e. RGB565. Three and four byte pixels (RGB888 and
+ * ARGB8888) come out of the same arithmetic.
+ *
+ * Frame rate: the surface is refreshed at 20 Hz. The guest's own vsync cadence is
+ * already satisfied by the RDMA status path, so this only feeds the human looking at
+ * the window, and re-reading 2 MB of guest memory 60 times a second to show a static
+ * splash would be a waste of the host CPU.
+ */
+#define OVL_ROI_SIZE_REG  0x0020
+#define OVL_EN_REG        0x000c
+#define OVL_L_ADDR(n)     (0x50 + (n) * 0x20 + 0x10)
+#define OVL_L_PITCH(n)    (0x50 + (n) * 0x20 + 0x14)
+#define OVL_L_SIZE(n)     (0x50 + (n) * 0x20 + 0x08)
+#define OVL_NUM_LAYERS    4
+#define OVL_FRAME_NS      (1000000000ull / 20)
+
+/* One guest pixel, converted to the surface's 0xXXRRGGBB layout. */
+static uint32_t mt6589_disp_cvt_pixel(const uint8_t *p, int bpp)
+{
+    switch (bpp) {
+    case 1:
+        return ((uint32_t)p[0] << 16) | ((uint32_t)p[0] << 8) | p[0];
+    case 2: {
+        uint32_t v = p[0] | ((uint32_t)p[1] << 8);
+
+        return (((v >> 11) & 0x1f) << 19) | (((v >> 5) & 0x3f) << 10) |
+               ((v & 0x1f) << 3);
+    }
+    case 3:
+    case 4:
+    default:
+        /* Guest memory is little-endian B, G, R [, A]. */
+        return ((uint32_t)p[2] << 16) | ((uint32_t)p[1] << 8) | p[0];
+    }
+}
+
+/*
+ * MT6589_DISP_DUMP=<path> writes the composed frame out as a PPM.
+ *
+ * This is how the scanout is verified at all: the emulator is built
+ * --without-default-features, which leaves it with neither an HMP monitor nor QMP
+ * screendump (measured: "HMP monitor is not available, use '-qmp'", and then
+ * "The command screendump has not been found"), so the model has to be able to show
+ * what it produced. Written on every 20th frame, so a run leaves one recent picture
+ * instead of gigabytes of them.
+ */
+static void mt6589_disp_dump(Mt6589DispBlockState *s, DisplaySurface *surface,
+                             int w, int h)
+{
+    const char *path = getenv("MT6589_DISP_DUMP");
+    g_autofree char *tmp = NULL;
+    int stride;
+    uint8_t *data;
+    uint32_t sum = 0;
+    FILE *f;
+
+    if (!path || !s->frame_count) {
+        return;
+    }
+    stride = surface_stride(surface);
+    data = surface_data(surface);
+    /*
+     * Only write the file when the picture actually changed. Sampling every 64th
+     * pixel is enough to notice a change and makes the check cheap enough to run
+     * every frame, which is what makes the dump meaningful: it ends up holding the
+     * LAST frame that had content in it, instead of whichever frame happened to
+     * land on a modulo boundary before the guest drew anything.
+     */
+    for (int y = 0; y < h; y += 8) {
+        const uint32_t *row = (const uint32_t *)(data + (size_t)y * stride);
+
+        for (int x = 0; x < w; x += 8) {
+            sum = sum * 31u + row[x];
+        }
+    }
+    if (sum == s->last_sum) {
+        return;
+    }
+    s->last_sum = sum;
+    tmp = g_strdup_printf("%s.tmp", path);
+    f = fopen(tmp, "wb");
+    if (!f) {
+        return;
+    }
+    fprintf(f, "P6\n%d %d\n255\n", w, h);
+    for (int y = 0; y < h; y++) {
+        const uint32_t *row = (const uint32_t *)(data + (size_t)y * stride);
+
+        for (int x = 0; x < w; x++) {
+            uint32_t p = row[x];
+            uint8_t rgb[3] = { (p >> 16) & 0xff, (p >> 8) & 0xff, p & 0xff };
+
+            fwrite(rgb, 1, 3, f);
+        }
+    }
+    fclose(f);
+    rename(tmp, path);
+}
+
+static void mt6589_ovl_compose(Mt6589DispBlockState *s)
+{
+    DisplaySurface *surface;
+    uint32_t roi;
+    int w, h, stride;
+    uint32_t *dst;
+    uint8_t line[4096 * 4];
+
+    if (!s->con) {
+        return;
+    }
+    surface = qemu_console_surface(s->con);
+    if (!surface) {
+        return;
+    }
+    roi = s->regs[OVL_ROI_SIZE_REG >> 2];
+    w = roi & 0xffff;
+    h = roi >> 16;
+    if (w <= 0 || h <= 0 || w > 4096 || h > 4096) {
+        return;
+    }
+    if (surface_width(surface) != w || surface_height(surface) != h) {
+        /*
+         * Not while the UI is inside gfx_update: resizing there re-enters the
+         * graphic layer from its own callback.
+         */
+        if (s->in_gfx_update) {
+            return;
+        }
+        qemu_console_resize(s->con, w, h);
+        surface = qemu_console_surface(s->con);
+        if (!surface || surface_width(surface) != w || surface_height(surface) != h) {
+            return;
+        }
+    }
+    if (surface_format(surface) != PIXMAN_x8r8g8b8) {
+        static bool warned;
+
+        if (!warned) {
+            warned = true;
+            qemu_log_mask(LOG_UNIMP, "%s: console is not x8r8g8b8, scanout "
+                          "disabled\n", __func__);
+        }
+        return;
+    }
+
+    stride = surface_stride(surface);
+    dst = (uint32_t *)surface_data(surface);
+    /* Background: black unless the guest programmed a colour at 0x38. */
+    {
+        uint32_t bg = s->regs[0x0038 >> 2];
+
+        bg = ((bg & 0xff) << 16) | (bg & 0xff00) | ((bg >> 16) & 0xff);
+        memset(dst, 0, (size_t)stride * h);
+        if (bg) {
+            for (int y = 0; y < h; y++) {
+                uint32_t *d = dst + (size_t)y * (stride / 4);
+
+                for (int x = 0; x < w; x++) {
+                    d[x] = bg;
+                }
+            }
+        }
+    }
+
+    for (int n = 0; n < OVL_NUM_LAYERS; n++) {
+        hwaddr addr = s->regs[OVL_L_ADDR(n) >> 2];
+        uint32_t pitch = s->regs[OVL_L_PITCH(n) >> 2];
+        uint32_t size = s->regs[OVL_L_SIZE(n) >> 2];
+        int lw, lh, bpp;
+
+        if (!addr || !pitch) {
+            continue;
+        }
+        lw = size & 0xffff;
+        lh = size >> 16;
+        if (!lw || !lh) {
+            lw = w;
+            lh = h;
+        }
+        bpp = pitch / lw;
+        if (bpp < 1 || bpp > 4) {
+            continue;
+        }
+        lw = MIN(lw, w);
+        lh = MIN(lh, h);
+        lw = MIN(lw, (int)(sizeof(line) / bpp));
+
+        if (mt6589_disp_log_enabled() && s->frame_count <= 1) {
+            fprintf(stderr, "DISP scanout layer %d: addr=%08" PRIx64
+                    " pitch=%u size=%dx%d bpp=%d\n", n, (uint64_t)addr, pitch,
+                    size & 0xffff, size >> 16, bpp);
+        }
+
+        for (int y = 0; y < lh; y++) {
+            uint32_t *d = dst + (size_t)y * (stride / 4);
+
+            if (address_space_read(&address_space_memory,
+                                   addr + (hwaddr)y * pitch,
+                                   MEMTXATTRS_UNSPECIFIED, line,
+                                   (hwaddr)lw * bpp) != MEMTX_OK) {
+                continue;
+            }
+            for (int x = 0; x < lw; x++) {
+                d[x] = mt6589_disp_cvt_pixel(line + x * bpp, bpp);
+            }
+        }
+    }
+    mt6589_disp_dump(s, surface, w, h);
+    qemu_console_update(s->con, 0, 0, w, h);
+}
+
+static void mt6589_ovl_frame_tick(void *opaque)
+{
+    Mt6589DispBlockState *s = opaque;
+
+    if (!(s->regs[OVL_ROI_SIZE_REG >> 2])) {
+        return;                             /* nothing programmed: stop scanning */
+    }
+    s->frame_count++;
+    mt6589_ovl_compose(s);
+    timer_mod(&s->frame_timer,
+              qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + OVL_FRAME_NS);
+}
+
+/*
+ * Called after any OVL register write: as soon as the guest has programmed a region
+ * of interest, start producing frames. Tying this to OVL_EN alone would miss LK,
+ * which programs the layers and the ROI before it sets the enable bit.
+ */
+static void mt6589_ovl_kick(Mt6589DispBlockState *s)
+{
+    if (!s->con) {
+        return;
+    }
+    if (!(s->regs[OVL_ROI_SIZE_REG >> 2])) {
+        timer_del(&s->frame_timer);
+        return;
+    }
+    if (!timer_pending(&s->frame_timer)) {
+        timer_mod(&s->frame_timer,
+                  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + OVL_FRAME_NS);
+    }
+}
+
+static bool mt6589_ovl_gfx_update(void *opaque)
+{
+    Mt6589DispBlockState *s = opaque;
+
+    s->in_gfx_update = true;
+    mt6589_ovl_compose(s);
+    s->in_gfx_update = false;
+    return true;
+}
+
+static const GraphicHwOps mt6589_ovl_gfx_ops = {
+    .gfx_update = mt6589_ovl_gfx_update,
+};
 
 static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
 {
@@ -519,6 +858,16 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
     Mt6589DispBlockState *s = opaque;
     const Mt6589DispReg *r = find_reg(s->desc, offset);
 
+    /*
+     * Set MT6589_DISP_LOG=1 to see every display register write. This is how the
+     * scanout model below was derived: the guest's own programming sequence is
+     * the specification, and it is measured rather than guessed.
+     */
+    if (mt6589_disp_log_enabled()) {
+        fprintf(stderr, "DISP %-5s W %04" HWADDR_PRIx " = %08" PRIx32 "\n",
+                s->desc->name, offset, (uint32_t)value);
+    }
+
     if (!r) {
         qemu_log_mask(LOG_UNIMP, "%s(%s): write 0x%" PRIx64 " to unmodelled "
                       "offset 0x%" HWADDR_PRIx "\n", __func__,
@@ -563,6 +912,11 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
             mt6589_disp_mutex_update_irq(s);
         }
     }
+
+    /* The OVL is the composer: any write may be the one that completes a modeset. */
+    if (s->desc->base == 0x14003000) {
+        mt6589_ovl_kick(s);
+    }
 }
 
 static const MemoryRegionOps mt6589_disp_ops = {
@@ -590,6 +944,18 @@ static void mt6589_disp_realize(DeviceState *dev, Error **errp)
     mt6589_disp_reset(dev);
     if (s->desc->has_irq) {
         sysbus_init_irq(SYS_BUS_DEVICE(dev), &s->irq);
+    }
+    /*
+     * Only the OVL gets a console, because it is the block whose output the panel
+     * shows. The other instances are configuration registers with nothing to draw.
+     */
+    if (s->desc->base == 0x14003000) {
+        s->con = qemu_graphic_console_create(dev, 0, &mt6589_ovl_gfx_ops, s);
+        if (s->con) {
+            qemu_console_resize(s->con, 1280, 800);
+        }
+        timer_init_ns(&s->frame_timer, QEMU_CLOCK_VIRTUAL,
+                      mt6589_ovl_frame_tick, s);
     }
 }
 

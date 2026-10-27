@@ -51,6 +51,16 @@ struct Mt6589DispBlockState {
 
     /* 4 KiB of registers, which covers every documented block layout. */
     uint32_t regs[0x400];
+
+    /*
+     * Scanout. Only the OVL instance - it is the composer, and its output is
+     * what the panel shows - gets a console.
+     */
+    QemuConsole *con;
+    QEMUTimer frame_timer;
+    uint32_t frame_count;
+    bool in_gfx_update;
+    uint32_t last_sum;      /* checksum of the last frame written to disk */
 };
 
 /* Create and map OVL, RDMA, COLOR and MUTEX. */
