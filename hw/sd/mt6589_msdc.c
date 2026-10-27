@@ -419,6 +419,20 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
      */
 }
 
+#define MT6589_MSDC_CMD_TMO_NS  (5 * 1000000)
+
+static void mt6589_msdc_cmd_tmo(void *opaque)
+{
+    Mt6589MsdcState *s = opaque;
+
+    if (!s->cmd_tmo_pending) {
+        return;
+    }
+    s->cmd_tmo_pending = 0;
+    s->int_status |= MSDC_INT_CMDTMO;
+    mt6589_msdc_update_irq(s);
+}
+
 static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
 {
     uint32_t cmd = s->sdc_cmd;
@@ -442,6 +456,12 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
     s->int_status &= ~(MSDC_INT_CMDRDY | MSDC_INT_CMDTMO | MSDC_INT_RSPCRCERR |
                        MSDC_INT_ACMDRDY | MSDC_INT_ACMDTMO);
     bool is_write = (cmd & SDC_CMD_RW) != 0;
+    bool was_app = s->app_cmd;
+    s->app_cmd = 0;
+    if (s->cmd_tmo_pending) {
+        s->cmd_tmo_pending = 0;
+        timer_del(&s->cmd_tmo_timer);
+    }
 
     s->sdc_sts &= ~0x1u;   /* SDC_STS.BUSY clear: the command finished */
 
@@ -617,12 +637,48 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         }
         break;
     case 41:  /* SD_APP_OP_COND (after CMD55) */
+        /*
+         * An eMMC does not implement ACMD41, and *this* is the command that has to
+         * time out - not CMD55.
+         *
+         * Both the preloader/LK mmc_send_app_op_cond() and the kernel's
+         * mmc_attach_sd() probe with CMD55 + ACMD41 and treat any error as "not an
+         * SD card", so making ACMD41 time out still puts both on the MMC path.
+         * Making CMD55 the failing one instead left the kernel re-scanning: it
+         * sends CMD55 with arg 0 from mmc_send_app_op_cond(host, 0, &ocr), gets a
+         * timeout, backs off, and tries again - measured at thousands of CMD55
+         * timeouts/s, each raising MSDC_INT_CMDTMO and re-asserting the
+         * level-triggered line. That produced the endless
+         * "CPU0: Unknown IPI message 0x0": the interrupt never stopped and the
+         * ARM entry code's IPI test then saw a stale register.
+         */
         /* Busy must clear or the guest retries for ever; report ready. */
         s->sdc_resp[0] = MSDC_CARD_OCR | (1u << 31);
         break;
     case 55:  /* APP_CMD - eMMC has no SD application commands */
-        s->int_status |= MSDC_INT_CMDTMO;
-        mt6589_msdc_update_irq(s);
+        /*
+         * CMD55 has to be the command that fails, not ACMD41.
+         *
+         * LK's mmc_send_app_op_cond() short-circuits on success when its ocr
+         * argument is 0 (0x81e057bc `cbz r6`), so if CMD55 is answered and only
+         * ACMD41 times out, LK still reports "this is an SD card", never sets
+         * MMC_TYPE_MMC, never reads EXT_CSD, and g_emmc_size stays 0 - measured
+         * as "TOOL DL image Fail / uboot is blocking by dl info". Failing CMD55
+         * is the only thing that makes both the preloader and LK take the MMC
+         * branch.
+         *
+         * The cost is that the kernel re-scans: mmc_send_app_op_cond(host, 0,
+         * &ocr) gets this timeout, backs off and retries, and because this model
+         * reports the timeout instantly the retry spins at CPU speed (~8,800/s,
+         * measured). Each retry sets MSDC_INT_CMDTMO again, so the level-
+         * triggered line never de-asserts - which is what produces the endless
+         * "CPU0: Unknown IPI message 0x0". Making the timeout take real time
+         * (rather than completing instantly) would turn that into a slow retry
+         * loop and is the next thing to model here.
+         */
+        s->cmd_tmo_pending = 1;
+        timer_mod(&s->cmd_tmo_timer,
+                  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + MT6589_MSDC_CMD_TMO_NS);
         return;
     case 6:   /* SWITCH, and ACMD6 (SET_BUS_WIDTH) after CMD55 */
         /*
@@ -928,6 +984,20 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         }
         return;
     case MSDC_INT:
+        /*
+         * Write-1-to-clear. The driver acknowledges by writing back the bits it
+         * handled, and ignoring the write leaves those bits asserted for ever:
+         * the line is level-triggered, so the GIC re-delivers immediately and
+         * the CPU never leaves the handler.
+         *
+         * Measured before this fix: MSDC INT_STATUS stayed 0x00000200
+         * (MSDC_INT_CMDTMO, left over from the eMMC probe's CMD55 timeout) with
+         * INT_EN 0x0001ff7b, and the kernel looped on IAR = 0x47 (IRQ 71) -
+         * which is what produced the "CPU0: Unknown IPI message 0x0" flood,
+         * because the entry code's IPI test then saw a stale register.
+         */
+        s->int_status &= ~((uint32_t)value);
+        mt6589_msdc_update_irq(s);
         return;
     case MSDC_DAT_RDDLY0:
         s->dat_rddly0 = value;
@@ -1063,6 +1133,8 @@ static void mt6589_msdc_finalize(Object *obj)
 static void mt6589_msdc_realize(DeviceState *dev, Error **errp)
 {
     Mt6589MsdcState *s = MT6589_MSDC(dev);
+
+    timer_init_ns(&s->cmd_tmo_timer, QEMU_CLOCK_VIRTUAL, mt6589_msdc_cmd_tmo, s);
 
     if (s->image) {
         qemu_log_mask(LOG_UNIMP, "%s: %s has a %zu byte card image\n",

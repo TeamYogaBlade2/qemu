@@ -71,6 +71,22 @@ struct Mt6589MsdcState {
      * image, so those transfers need their own buffer to point into.
      */
     uint8_t meta[512];
+    /*
+     * Set by CMD55 and consumed by the next command, so ACMD41 can be told apart
+     * from a bare CMD41. Both the boot chain and the kernel probe for an SD card
+     * with CMD55+ACMD41 and fall back to MMC when that fails; *which* of the two
+     * fails matters (see the CMD41/CMD55 cases in mt6589_msdc.c).
+     */
+    int app_cmd;
+    /*
+     * A command timeout is a real delay on hardware (LK programs 100 ms in the
+     * command descriptor), not an instantaneous answer. Completing it at once
+     * makes a guest that retries the command spin at CPU speed - measured
+     * thousands of CMD55 timeouts per second, which kept the level-triggered
+     * interrupt asserted and flooded printk.
+     */
+    QEMUTimer cmd_tmo_timer;
+    int cmd_tmo_pending;
     /* Set by ACMD51 so the next FIFO fill serves `meta` instead of the image. */
     int scr_pending;
     int is_mmc;
