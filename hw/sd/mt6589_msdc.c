@@ -1120,9 +1120,13 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
          */
         if (mt6589_msdc_log_enabled()) {
             uint32_t pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
+            uint32_t lr = current_cpu ? cpu_env(current_cpu)->regs[14] : 0;
 
-            fprintf(stderr, "MSDC %s CMD %2u arg 0x%08x pc=%08" PRIx32 "\n",
-                    s->name, (unsigned)(value & 0x3f), s->sdc_arg, pc);
+            /* The PC lands inside the low-level send routine; the LR names its caller, which is
+             * the layer whose read pattern is worth knowing (a whole-card read is either the
+             * guest's own logic or a size field this model hands back wrongly). */
+            fprintf(stderr, "MSDC %s CMD %2u arg 0x%08x pc=%08" PRIx32 " lr=%08" PRIx32 "\n",
+                    s->name, (unsigned)(value & 0x3f), s->sdc_arg, pc, lr);
         }
         /* The command is executed on the write, and BUSY is raised so a guest
          * that polls SDC_STS sees the same sequence as on hardware. */
