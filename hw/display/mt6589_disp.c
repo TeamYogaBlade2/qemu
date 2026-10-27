@@ -56,6 +56,19 @@
 #include "system/memory.h"
 #include "ui/console.h"
 
+/*
+ * Register definitions come from the generated datasheet headers
+ * (mt6589-emulator/tools/gen_regs_header.py), so an offset in this file is an
+ * expression with the datasheet's own name rather than a number copied by hand.
+ * The headers carry absolute addresses, hence the _OFF() helpers below.
+ */
+#include "hw/arm/mt6589-regs/mt6589-disp_ovl-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-disp_rdma-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-disp_mutex-regs.h"
+
+#define RDMA(name)  (MT6589_DISP_RDMA_##name - MT6589_DISP_RDMA_BASE)
+#define MUTEX(name) (MT6589_DISP_MUTEX_##name - MT6589_DISP_MUTEX_BASE)
+
 
 /* ------------------------------------------------------------------------- */
 /* OVL - display overlay, 0x14003000                                          */
@@ -85,43 +98,43 @@
  * the rest - which is exactly how the earlier table lost the layer addresses and
  * left this block unable to render anything.
  */
-#define OVL_L(n, o)  (0x50 + (n) * 0x20 + (o))
+/*
+ * The layer bases come from the generated datasheet header, not from counting: the
+ * layers start at 0x30 and step by 0x20, so L0 is 0x30..0x44, L1 0x50..0x64,
+ * L2 0x70..0x84 and L3 0x90..0xa4. An earlier version of this table started at 0x50,
+ * which quietly shifted every layer by one: the register it read as "L1" was really L2,
+ * the buffer it drew was right, and **L0 - the plane a driver is most likely to use -
+ * was never rendered at all**. That is exactly the class of mistake a generated header
+ * prevents, and it is why the numbers below are expressions rather than literals.
+ */
+#define OVL(name)   (MT6589_DISP_OVL_##name - MT6589_DISP_OVL_BASE)
+
+/* Every layer has the same six registers, 0x20 apart: CON, SRCKEY, SRC_SIZE, OFFSET,
+ * ADDR, PITCH. */
+#define OVL_LAYER_REGS(n)                                                  \
+    { OVL(OVL_L##n##_CON), 0, 0 },                                         \
+    { OVL(OVL_L##n##_SRCKEY), 0, 0 },                                      \
+    { OVL(OVL_L##n##_SRC_SIZE), 0, 0 },                                    \
+    { OVL(OVL_L##n##_OFFSET), 0, 0 },                                      \
+    { OVL(OVL_L##n##_ADDR), 0, 0 },                                        \
+    { OVL(OVL_L##n##_PITCH), 0, 0 }
 
 static const Mt6589DispReg mt6589_ovl_regs[] = {
-    { 0x0000, 0x0000001f, MREG_IDLE },  /* OVL_STA: RDMA idle bits */
-    { 0x0004, 0, 0 },                   /* OVL_CON / layer enable */
-    { 0x000c, 0, 0 },                   /* OVL_EN */
-    { 0x0010, 0, MREG_SELFCL },         /* OVL_TRIG */
-    { 0x0014, 0, MREG_SELFCL },         /* OVL_RST */
-    { 0x0020, 0, 0 },                   /* OVL_ROI_SIZE */
-    { 0x0028, 0, 0 },                   /* OVL_DATAPATH_CON */
-    { 0x002c, 0, 0 },                   /* OVL_SRC_CON */
-    { 0x0038, 0, 0 },                   /* OVL_ROI_BGCLR */
-    { OVL_L(0, 0x00), 0, 0 },           /* L0 CON */
-    { OVL_L(0, 0x04), 0, 0 },           /* L0 ALPHA/KEY */
-    { OVL_L(0, 0x08), 0, 0 },           /* L0 SIZE */
-    { OVL_L(0, 0x0c), 0, 0 },           /* L0 OFFSET */
-    { OVL_L(0, 0x10), 0, 0 },           /* L0 ADDR */
-    { OVL_L(0, 0x14), 0, 0 },           /* L0 PITCH */
-    { OVL_L(1, 0x00), 0, 0 },           /* L1 CON */
-    { OVL_L(1, 0x04), 0, 0 },
-    { OVL_L(1, 0x08), 0, 0 },
-    { OVL_L(1, 0x0c), 0, 0 },
-    { OVL_L(1, 0x10), 0, 0 },
-    { OVL_L(1, 0x14), 0, 0 },
-    { OVL_L(2, 0x00), 0, 0 },           /* L2 CON */
-    { OVL_L(2, 0x04), 0, 0 },
-    { OVL_L(2, 0x08), 0, 0 },
-    { OVL_L(2, 0x0c), 0, 0 },
-    { OVL_L(2, 0x10), 0, 0 },
-    { OVL_L(2, 0x14), 0, 0 },
-    { OVL_L(3, 0x00), 0, 0 },           /* L3 CON */
-    { OVL_L(3, 0x04), 0, 0 },
-    { OVL_L(3, 0x08), 0, 0 },
-    { OVL_L(3, 0x0c), 0, 0 },
-    { OVL_L(3, 0x10), 0, 0 },
-    { OVL_L(3, 0x14), 0, 0 },
-    { 0x0100, 0, 0 },                   /* per-layer extension control */
+    { OVL(OVL_STA), 0x0000001f, MREG_IDLE },  /* RDMA idle bits */
+    { OVL(OVL_INTEN), 0, 0 },
+    { OVL(OVL_INTSTA), 0, MREG_W1C },
+    { OVL(OVL_EN), 0, 0 },
+    { OVL(OVL_TRIG), 0, MREG_SELFCL },
+    { OVL(OVL_RST), 0, MREG_SELFCL },
+    { OVL(OVL_ROI_SIZE), 0, 0 },
+    { OVL(OVL_ROI_BGCLR), 0, 0 },
+    { OVL(OVL_SRC_CON), 0, 0 },
+    OVL_LAYER_REGS(0),
+    OVL_LAYER_REGS(1),
+    OVL_LAYER_REGS(2),
+    OVL_LAYER_REGS(3),
+    /* The per-layer extension blocks the driver also writes. */
+    { 0x0100, 0, 0 },
     { 0x0120, 0, 0 },
     { 0x0140, 0, 0 },
     { 0x0160, 0, 0 },
@@ -134,27 +147,26 @@ static const Mt6589DispReg mt6589_ovl_regs[] = {
  * registers. INT_STATUS is W1C.
  */
 static const Mt6589DispReg mt6589_rdma_regs[] = {
-    { 0x0000, 0, 0 },                   /* INT_ENABLE */
-    { 0x0004, 0, MREG_W1C },            /* INT_STATUS */
-    { 0x0010, 0, 0 },                   /* GLOBAL_CON */
-    { 0x0014, 0, 0 },                   /* SIZE_CON_0 */
-    { 0x0018, 0, 0 },                   /* SIZE_CON_1 */
-    { 0x001c, 0, 0 },                   /* TARGET_LINE */
-    { 0x0024, 0, 0 },                   /* MEM_CON */
+    { RDMA(DISP_RDMA_INT_ENABLE), 0, 0 },
+    { RDMA(DISP_RDMA_INT_STATUS), 0, MREG_W1C },
+    { RDMA(DISP_RDMA_GLOBAL_CON), 0, 0 },
+    { RDMA(DISP_RDMA_SIZE_CON_0), 0, 0 },
+    { RDMA(DISP_RDMA_SIZE_CON_1), 0, 0 },
+    { RDMA(DISP_RDMA_TARGET_LINE), 0, 0 },
+    { RDMA(DISP_RDMA_MEM_CON), 0, 0 },
     /*
-     * Measured from LK: it writes the source address to 0x0028 and the pitch to
-     * 0x002c, not 0x0040/0x0044. With those two offsets absent the address was
-     * dropped, which is why the RDMA side of this model could never have rendered
-     * anything even if it had had a framebuffer to read.
+     * The source address and pitch are at 0x0028/0x002c. The previous table had them
+     * at 0x0040/0x0044, which the generated header shows are FIFO_CON and FIFO_LOG -
+     * so the address was being dropped, and this block could not have rendered anything
+     * even if it had had a framebuffer to read. LK's own sequence writes 0x0028/0x002c,
+     * which is how the discrepancy was found.
      */
-    { 0x0028, 0, 0 },                   /* MEM_START_ADDR */
-    { 0x002c, 0, 0 },                   /* MEM_SRC_PITCH */
-    { 0x0040, 0, 0 },                   /* shadow register set */
-    { 0x0044, 0, 0 },
-    { 0x0048, 0, 0 },                   /* MEM_GMC_SETTING_0 */
-    { 0x004c, 0, 0 },                   /* MEM_GMC_SETTING_1 */
-    { 0x0050, 0, 0 },                   /* MEM_SLOW_CON */
-    { 0x0054, 0, 0 },                   /* FIFO_CON */
+    { RDMA(DISP_RDMA_MEM_START_ADDR), 0, 0 },
+    { RDMA(DISP_RDMA_MEM_SRC_PITCH), 0, 0 },
+    { RDMA(DISP_RDMA_MEM_GMC_SETTING_0), 0, 0 },
+    { RDMA(DISP_RDMA_MEM_SLOW_CON), 0, 0 },
+    { RDMA(DISP_RDMA_MEM_GMC_SETTING_1), 0, 0 },
+    { RDMA(DISP_RDMA_FIFO_CON), 0, 0 },
     { 0x0154, 0, 0 },                   /* OUTPUT_SIZE */
 };
 
@@ -186,16 +198,25 @@ static const Mt6589DispReg mt6589_color_regs[] = {
  * hides ordering bugs rather than exposing them.
  */
 static const Mt6589DispReg mt6589_mutex_regs[] = {
-    { 0x0000, 0, 0 },                   /* MUTEX_INTEN */
-    { 0x0004, 0, MREG_W1C },            /* MUTEX_INTSTA */
-    { 0x0020, 0, 0 },                   /* MUTEX0_EN */
-    { 0x0024, 0, 0 },                   /* MUTEX0_RST */
-    { 0x0028, 0, 0 },                   /* MUTEX0_MOD */
-    { 0x002c, 0, 0 },                   /* MUTEX0_SOF */
-    { 0x0040, 0, 0 },                   /* MUTEX1_EN */
-    { 0x0044, 0, 0 },                   /* MUTEX1_RST */
-    { 0x0048, 0, 0 },                   /* MUTEX1_MOD */
-    { 0x004c, 0, 0 },                   /* MUTEX1_SOF */
+    { MUTEX(DISP_MUTEX_INTEN), 0, 0 },
+    { MUTEX(DISP_MUTEX_INTSTA), 0, MREG_W1C },
+    /*
+     * Per mutex: EN, MUTEX, RST, MOD, SOF at 0x20/0x24/0x28/0x2c/0x30 and
+     * 0x40/0x44/0x48/0x4c/0x50. The previous table put RST at 0x24 and SOF at 0x2c -
+     * one register early from RST onwards - so SOF writes went to MOD and never raised
+     * the event, while the grant the driver actually polls (bit 1 of MUTEX at 0x24)
+     * lived in what this model called RST.
+     */
+    { MUTEX(DISP_MUTEX0_EN), 0, 0 },
+    { MUTEX(DISP_MUTEX0), 0, 0 },
+    { MUTEX(DISP_MUTEX0_RST), 0, 0 },
+    { MUTEX(DISP_MUTEX0_MOD), 0, 0 },
+    { MUTEX(DISP_MUTEX0_SOF), 0, 0 },
+    { MUTEX(DISP_MUTEX1_EN), 0, 0 },
+    { MUTEX(DISP_MUTEX1), 0, 0 },
+    { MUTEX(DISP_MUTEX1_RST), 0, 0 },
+    { MUTEX(DISP_MUTEX1_MOD), 0, 0 },
+    { MUTEX(DISP_MUTEX1_SOF), 0, 0 },
 };
 
 #define BLOCK(name_, base_, regs_, irq)                       \
@@ -227,6 +248,8 @@ static const Mt6589DispReg mt6589_dsi_regs[] = {
     { 0x0050, 0x00000000, 0 },  /* DSI_HSA_WC */
     { 0x0054, 0x00000000, 0 },  /* DSI_HBP_WC */
     { 0x0058, 0x00000000, 0 },  /* DSI_HFP_WC */
+    { 0x005c, 0x00000000, 0 },  /* DSI_BLLP_WC - the driver writes it; without the
+                                 * entry the value was dropped and read back as 0 */
     { 0x0060, 0x00000000, 0 },  /* DSI_CMDQ_CON */
     { 0x0074, 0x00000000, 0 },  /* DSI_RX_DATA03 */
     { 0x0078, 0x00000000, 0 },  /* DSI_RX_DATA47 */
@@ -530,11 +553,13 @@ static const Mt6589DispReg *find_reg(const Mt6589DispBlock *b,
  * the window, and re-reading 2 MB of guest memory 60 times a second to show a static
  * splash would be a waste of the host CPU.
  */
-#define OVL_ROI_SIZE_REG  0x0020
-#define OVL_EN_REG        0x000c
-#define OVL_L_ADDR(n)     (0x50 + (n) * 0x20 + 0x10)
-#define OVL_L_PITCH(n)    (0x50 + (n) * 0x20 + 0x14)
-#define OVL_L_SIZE(n)     (0x50 + (n) * 0x20 + 0x08)
+#define OVL_ROI_SIZE_REG  OVL(OVL_ROI_SIZE)
+#define OVL_BGCLR_REG     OVL(OVL_ROI_BGCLR)
+#define OVL_EN_REG        OVL(OVL_EN)
+#define OVL_L_CON(n)      (OVL(OVL_L0_CON) + (n) * 0x20)
+#define OVL_L_SIZE(n)     (OVL(OVL_L0_SRC_SIZE) + (n) * 0x20)
+#define OVL_L_ADDR(n)     (OVL(OVL_L0_ADDR) + (n) * 0x20)
+#define OVL_L_PITCH(n)    (OVL(OVL_L0_PITCH) + (n) * 0x20)
 #define OVL_NUM_LAYERS    4
 #define OVL_FRAME_NS      (1000000000ull / 20)
 
@@ -671,7 +696,7 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
     dst = (uint32_t *)surface_data(surface);
     /* Background: black unless the guest programmed a colour at 0x38. */
     {
-        uint32_t bg = s->regs[0x0038 >> 2];
+        uint32_t bg = s->regs[OVL_BGCLR_REG >> 2];
 
         bg = ((bg & 0xff) << 16) | (bg & 0xff00) | ((bg >> 16) & 0xff);
         memset(dst, 0, (size_t)stride * h);
@@ -854,8 +879,8 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
 static void mt6589_disp_mutex_update_irq(Mt6589DispBlockState *s)
 {
     /* MUTEX_INTEN at 0x0000, MUTEX_INTSTA at 0x0004. */
-    uint32_t en = s->regs[0x0000 >> 2];
-    uint32_t sta = s->regs[0x0004 >> 2];
+    uint32_t en = s->regs[MUTEX(DISP_MUTEX_INTEN) >> 2];
+    uint32_t sta = s->regs[MUTEX(DISP_MUTEX_INTSTA) >> 2];
 
     if (s->desc->has_irq) {
         qemu_set_irq(s->irq, (en & sta) != 0);
@@ -881,13 +906,14 @@ static void mt6589_disp_mutex_update_irq(Mt6589DispBlockState *s)
 static void mt6589_disp_mutex_vsync(void *opaque)
 {
     Mt6589DispBlockState *s = opaque;
-    bool enabled = (s->regs[0x0020 >> 2] & 1u) || (s->regs[0x0040 >> 2] & 1u);
+    bool enabled = (s->regs[MUTEX(DISP_MUTEX0_EN) >> 2] & 1u) ||
+                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u);
 
     if (!enabled) {
         return;
     }
     s->vsync_count++;
-    s->regs[0x0004 >> 2] |= 1u;     /* MUTEX_INTSTA: event pending */
+    s->regs[MUTEX(DISP_MUTEX_INTSTA) >> 2] |= 1u;   /* event pending */
     mt6589_disp_mutex_update_irq(s);
     timer_mod(&s->vsync_timer,
               qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + MUTEX_VSYNC_NS);
@@ -895,7 +921,8 @@ static void mt6589_disp_mutex_vsync(void *opaque)
 
 static void mt6589_disp_mutex_kick(Mt6589DispBlockState *s)
 {
-    bool enabled = (s->regs[0x0020 >> 2] & 1u) || (s->regs[0x0040 >> 2] & 1u);
+    bool enabled = (s->regs[MUTEX(DISP_MUTEX0_EN) >> 2] & 1u) ||
+                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u);
     static int no_vsync = -1;
 
     /*
@@ -988,13 +1015,14 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
          * display pipeline - measured. Nothing else competes for the mutex here, so
          * the grant is immediate and mirrors the request.
          */
-        if (offset == 0x0024 || offset == 0x0044) {
+        if (offset == MUTEX(DISP_MUTEX0) || offset == MUTEX(DISP_MUTEX1)) {
             uint32_t v = (uint32_t)value;
 
             s->regs[offset >> 2] = (v & ~2u) | ((v & 1u) ? 2u : 0);
         }
-        if (offset == 0x002c || offset == 0x004c) {
-            uint32_t en_reg = (offset == 0x002c) ? 0x0020 : 0x0040;
+        if (offset == MUTEX(DISP_MUTEX0_SOF) || offset == MUTEX(DISP_MUTEX1_SOF)) {
+            uint32_t en_reg = (offset == MUTEX(DISP_MUTEX0_SOF))
+                              ? MUTEX(DISP_MUTEX0_EN) : MUTEX(DISP_MUTEX1_EN);
             if (s->regs[en_reg >> 2] & 1u) {
                 s->regs[0x0004 >> 2] |= 1u;   /* MUTEX_INTSTA */
                 mt6589_disp_mutex_update_irq(s);
@@ -1004,7 +1032,7 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
             mt6589_disp_mutex_update_irq(s);
         }
         /* Enabling or disabling a mutex starts or stops the per-frame event. */
-        if (offset == 0x0020 || offset == 0x0040) {
+        if (offset == MUTEX(DISP_MUTEX0_EN) || offset == MUTEX(DISP_MUTEX1_EN)) {
             mt6589_disp_mutex_kick(s);
         }
     }
