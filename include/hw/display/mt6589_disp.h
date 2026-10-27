@@ -61,6 +61,15 @@ struct Mt6589DispBlockState {
     uint32_t frame_count;
     bool in_gfx_update;
     uint32_t last_sum;      /* checksum of the last frame written to disk */
+    /*
+     * The DISP mutex raises an event at every frame start, which is what the panel
+     * pipe and its clients synchronise on. Modelling it as a periodic line is the
+     * honest simplification: there is no panel to drive, so the frame period is
+     * whatever the mode asks for, but the interrupt has to happen or every wait for
+     * a first frame blocks for ever.
+     */
+    QEMUTimer vsync_timer;
+    uint32_t vsync_count;
 };
 
 /* Create and map OVL, RDMA, COLOR and MUTEX. */

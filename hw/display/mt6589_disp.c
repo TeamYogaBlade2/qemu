@@ -849,6 +849,52 @@ static void mt6589_disp_mutex_update_irq(Mt6589DispBlockState *s)
     }
 }
 
+/*
+ * Frame start.
+ *
+ * The mutex does not only report when a module writes MUTEXn_SOF - it raises its event
+ * every time a frame begins, and everything downstream synchronises on that: the DSI
+ * and DPI paths wait for the first frame, and the kernel's display thread sleeps until
+ * an interrupt tells it a frame has gone out. With only the write-triggered event
+ * modelled, the kernel's own atomic-commit path waits for a first frame that never
+ * arrives.
+ *
+ * So while any mutex is enabled the event is raised every frame period (60 Hz, which
+ * is what the panel mode asks for). The interrupt is level-triggered on
+ * INTSTA & INTEN, as before, so acknowledging it with MUTEX_INTSTA keeps working.
+ */
+#define MUTEX_VSYNC_NS  (1000000000ull / 60)
+
+static void mt6589_disp_mutex_vsync(void *opaque)
+{
+    Mt6589DispBlockState *s = opaque;
+    bool enabled = (s->regs[0x0020 >> 2] & 1u) || (s->regs[0x0040 >> 2] & 1u);
+
+    if (!enabled) {
+        return;
+    }
+    s->vsync_count++;
+    s->regs[0x0004 >> 2] |= 1u;     /* MUTEX_INTSTA: event pending */
+    mt6589_disp_mutex_update_irq(s);
+    timer_mod(&s->vsync_timer,
+              qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + MUTEX_VSYNC_NS);
+}
+
+static void mt6589_disp_mutex_kick(Mt6589DispBlockState *s)
+{
+    bool enabled = (s->regs[0x0020 >> 2] & 1u) || (s->regs[0x0040 >> 2] & 1u);
+
+    if (!s->desc->has_irq) {
+        return;
+    }
+    if (enabled && !timer_pending(&s->vsync_timer)) {
+        timer_mod(&s->vsync_timer,
+                  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + MUTEX_VSYNC_NS);
+    } else if (!enabled) {
+        timer_del(&s->vsync_timer);
+    }
+}
+
 static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
                               unsigned size);
 
@@ -930,6 +976,10 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
             /* INTEN changed: the level follows status & enable. */
             mt6589_disp_mutex_update_irq(s);
         }
+        /* Enabling or disabling a mutex starts or stops the per-frame event. */
+        if (offset == 0x0020 || offset == 0x0040) {
+            mt6589_disp_mutex_kick(s);
+        }
     }
 
     /* The OVL is the composer: any write may be the one that completes a modeset. */
@@ -975,6 +1025,10 @@ static void mt6589_disp_realize(DeviceState *dev, Error **errp)
         }
         timer_init_ns(&s->frame_timer, QEMU_CLOCK_VIRTUAL,
                       mt6589_ovl_frame_tick, s);
+    }
+    if (s->desc->base == 0x14011000) {
+        timer_init_ns(&s->vsync_timer, QEMU_CLOCK_VIRTUAL,
+                      mt6589_disp_mutex_vsync, s);
     }
 }
 

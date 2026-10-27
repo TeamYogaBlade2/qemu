@@ -548,35 +548,32 @@ static const MemoryRegionOps mt6589_chipid_ops = {
  * where the generated map knows it, otherwise 0; writes are ignored. Anything
  * logged here is a register whose behaviour is still missing.
  */
-static bool mt6589_mfg_log_enabled(void)
+static bool mt6589_gpu_log_enabled(void)
 {
     static int enabled = -1;
 
     if (enabled < 0) {
-        enabled = getenv("MT6589_MFG_LOG") != NULL;
+        enabled = getenv("MT6589_GPU_LOG") != NULL;
     }
     return enabled;
 }
 
 /*
- * The GPU register window is at 0x1300_0000 (docs/sgx544: "64 KiB register window"),
- * which lies in the HIGH peri region - the one based at 0x1200_0000 - so a GPU access
- * reaches these handlers as 0x0100_0000 + x, not 0x0300_0000 + x. Both offsets are
- * mapped to the same window because the two regions share these handlers.
+ * The peripheral region is split in two so the preloader's SRAM at 0x1200_0000 is not
+ * covered, and the high half therefore starts at 0x1220_0000 rather than 0x1200_0000.
+ * Both halves shared one set of handlers, which made every offset ambiguous: an access
+ * to 0x1100_506C (FHCTL) and one to 0x1300_506C (the GPU) both arrived as 0x0100_506C.
+ * That ambiguity produced two wrong readings - a GPU trace that could never match, and
+ * a "GPU register" that was really FHCTL.
  *
- * Getting this wrong is why an earlier trace reported "zero GPU accesses" and a
- * conclusion was drawn from it: the condition could never have matched.
+ * The high half now normalises its offsets to be relative to 0x1000_0000 like the low
+ * half, so an offset in these handlers always means the same physical address.
  */
-static hwaddr mt6589_mfg_rel(hwaddr offset)
-{
-    if (offset >= 0x01000000 && offset < 0x01010000) {
-        return offset - 0x01000000;
-    }
-    if (offset >= 0x03000000 && offset < 0x03010000) {
-        return offset - 0x03000000;
-    }
-    return (hwaddr)-1;
-}
+#define MT6589_PERI_HI_SHIFT  (MT6589_PRERAM_END - 0x10000000)
+
+/* The GPU/SGX register window, 0x1300_0000 for 64 KiB. */
+#define MT6589_GPU_WINDOW     0x03000000
+#define MT6589_GPU_SIZE       0x00010000
 
 static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 {
@@ -589,21 +586,19 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
      * the only way to know whether that is a poll this model answers wrongly or a
      * wait for an interrupt nobody raises is to see the traffic.
      */
-    if (mt6589_mfg_log_enabled()) {
-        hwaddr rel = mt6589_mfg_rel(offset);
+    if (mt6589_gpu_log_enabled() &&
+        offset >= MT6589_GPU_WINDOW && offset < MT6589_GPU_WINDOW + MT6589_GPU_SIZE) {
+        /*
+         * The guest PC is included because a bare offset does not say WHERE the access
+         * came from, and a register the driver polls in a loop is exactly the case where
+         * the caller has to be found: searching the kernel image for the window's base
+         * address finds nothing, because ARM builds it from a movw/movt pair rather than
+         * a literal.
+         */
+        uint32_t pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
 
-        if (rel != (hwaddr)-1) {
-            /*
-             * The guest PC is included because a bare offset does not say WHERE the
-             * access came from, and a register the driver polls in a loop is exactly
-             * the case where the caller has to be found: searching the kernel image
-             * for the window's base address finds nothing, because ARM builds it from
-             * a movw/movt pair rather than a literal.
-             */
-            uint32_t pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
-
-            fprintf(stderr, "MFG R %05" HWADDR_PRIx " pc=%08" PRIx32 "\n", rel, pc);
-        }
+        fprintf(stderr, "GPU R %05" HWADDR_PRIx " pc=%08" PRIx32 "\n",
+                offset - MT6589_GPU_WINDOW, pc);
     }
 
     /*
@@ -791,13 +786,10 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
 {
     Mt6589State *s = opaque;
 
-    if (mt6589_mfg_log_enabled()) {
-        hwaddr rel = mt6589_mfg_rel(offset);
-
-        if (rel != (hwaddr)-1) {
-            fprintf(stderr, "MFG W %05" HWADDR_PRIx " = %08" PRIx32 "\n",
-                    rel, (uint32_t)value);
-        }
+    if (mt6589_gpu_log_enabled() &&
+        offset >= MT6589_GPU_WINDOW && offset < MT6589_GPU_WINDOW + MT6589_GPU_SIZE) {
+        fprintf(stderr, "GPU W %05" HWADDR_PRIx " = %08" PRIx32 "\n",
+                offset - MT6589_GPU_WINDOW, (uint32_t)value);
     }
 
     /* SPM MTCMOS power-control registers - see mt6589_peri_read(). */
@@ -891,6 +883,36 @@ static const MemoryRegionOps mt6589_peri_ops = {
      * the ROM to its abort vector, where it loops. Being permissive here costs
      * nothing: the handler ignores the value anyway.
      */
+    .valid = {
+        .min_access_size = 1,
+        .max_access_size = 8,
+    },
+    .impl = {
+        .min_access_size = 1,
+        .max_access_size = 8,
+    },
+};
+
+/*
+ * The high half of the peripheral region reuses the same implementation with the
+ * offset normalised, so a handler offset always denotes the same physical address no
+ * matter which region the access came through. See MT6589_PERI_HI_SHIFT.
+ */
+static uint64_t mt6589_peri_hi_read(void *opaque, hwaddr offset, unsigned size)
+{
+    return mt6589_peri_read(opaque, offset + MT6589_PERI_HI_SHIFT, size);
+}
+
+static void mt6589_peri_hi_write(void *opaque, hwaddr offset, uint64_t value,
+                                 unsigned size)
+{
+    mt6589_peri_write(opaque, offset + MT6589_PERI_HI_SHIFT, value, size);
+}
+
+static const MemoryRegionOps mt6589_peri_ops_hi = {
+    .read = mt6589_peri_hi_read,
+    .write = mt6589_peri_hi_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
     .valid = {
         .min_access_size = 1,
         .max_access_size = 8,
@@ -1270,7 +1292,7 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      */
     memory_region_add_subregion_overlap(get_system_memory(), 0x10000000,
                                         &s->peri_iomem, -1);
-    memory_region_init_io(&s->peri_iomem_hi, OBJECT(s), &mt6589_peri_ops, s,
+    memory_region_init_io(&s->peri_iomem_hi, OBJECT(s), &mt6589_peri_ops_hi, s,
                           "mt6589.peri.hi", 0x18000000 - MT6589_PRERAM_END);
     memory_region_add_subregion_overlap(
         get_system_memory(), MT6589_PRERAM_END, &s->peri_iomem_hi, -1);
