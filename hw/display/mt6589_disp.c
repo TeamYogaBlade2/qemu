@@ -420,7 +420,7 @@ static const Mt6589DispBlock mt6589_disp_blocks[] = {
     BLOCK("ovl",   0x14003000, mt6589_ovl_regs,   163),
     BLOCK("rdma",  0x14006000, mt6589_rdma_regs,  0),
     BLOCK("color", 0x1400a000, mt6589_color_regs, 0),
-    BLOCK("mutex", 0x14011000, mt6589_mutex_regs, 0),
+    BLOCK("mutex", 0x14011000, mt6589_mutex_regs, 192),
     BLOCK("wdma",  0x14004000, mt6589_wdma_regs,  0),
     BLOCK("bls",   0x14008000, mt6589_bls_regs,   0),
     BLOCK("gamma", 0x14009000, mt6589_gamma_regs, 0),
@@ -457,6 +457,42 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
     return s->regs[offset >> 2];
 }
 
+/*
+ * Display mutex interrupt.
+ *
+ * LK's DISP_Init waits for the mutex to report that a module has started a
+ * frame:
+ *
+ *     DISP/Wait for DISP MUTEX0 IRQ timeout!!!
+ *
+ * and with the timer interrupt misrouted that wait used to expire and LK carried
+ * on anyway. Once the tick was correct the wait became real, so the mutex has to
+ * actually raise its interrupt.
+ *
+ * MT6589's DISP MUTEX is at GIC_SPI 160, i.e. GIC line 32 + 160 = 192
+ * (mainline: mutex@14011000, interrupts = <GIC_SPI 160 ...>).
+ *
+ * Behaviour: MUTEX0_EN enables the block, MUTEX0_MOD names the module that owns
+ * it, and a write to MUTEX0_SOF asks for a synchronisation event - which is when
+ * the interrupt is raised. MUTEX_INTSTA is write-1-to-clear (MREG_W1C), and
+ * MUTEX_INTEN gates it. Raising the status regardless of INTEN and letting the
+ * level be status & enable is the same rule used by the MSDC model and by the
+ * generic path below.
+ */
+static void mt6589_disp_mutex_update_irq(Mt6589DispBlockState *s)
+{
+    /* MUTEX_INTEN at 0x0000, MUTEX_INTSTA at 0x0004. */
+    uint32_t en = s->regs[0x0000 >> 2];
+    uint32_t sta = s->regs[0x0004 >> 2];
+
+    if (s->desc->has_irq) {
+        qemu_set_irq(s->irq, (en & sta) != 0);
+    }
+}
+
+static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
+                              unsigned size);
+
 static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
                               unsigned size)
 {
@@ -475,6 +511,9 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
     }
     if (r->flags & MREG_W1C) {
         s->regs[offset >> 2] &= ~((uint32_t)value);
+        if (s->desc->base == 0x14011000) {   /* MUTEX: INTSTA just cleared */
+            mt6589_disp_mutex_update_irq(s);
+        }
         return;
     }
     if (r->flags & MREG_SELFCL) {
@@ -486,6 +525,24 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
         return;
     }
     s->regs[offset >> 2] = value;
+
+    /*
+     * A write to a MUTEXn_SOF register requests a sync event; that is the point
+     * at which the mutex reports to the interrupt controller. The SOF registers
+     * are at 0x002c and 0x004c with MUTEX0_EN at 0x0020 / MUTEX1_EN at 0x0040.
+     */
+    if (s->desc->base == 0x14011000) {
+        if (offset == 0x002c || offset == 0x004c) {
+            uint32_t en_reg = (offset == 0x002c) ? 0x0020 : 0x0040;
+            if (s->regs[en_reg >> 2] & 1u) {
+                s->regs[0x0004 >> 2] |= 1u;   /* MUTEX_INTSTA */
+                mt6589_disp_mutex_update_irq(s);
+            }
+        } else if (offset == 0x0000) {
+            /* INTEN changed: the level follows status & enable. */
+            mt6589_disp_mutex_update_irq(s);
+        }
+    }
 }
 
 static const MemoryRegionOps mt6589_disp_ops = {

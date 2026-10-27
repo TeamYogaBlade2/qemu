@@ -484,7 +484,16 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * (mt6589.dtsi puts OVL at GIC_SPI 163), and qdev asserts rather than
      * truncating when a peripheral asks for a line past the end.
      */
-    qdev_prop_set_uint32(s->gic, "num-irq", 224);
+    /*
+     * 256, not 224. QEMU's arm_gic reserves the last GIC_INTERNAL (32) lines for
+     * the virtual-interrupt extension, so with num-irq 224 the usable GIC lines
+     * stop at 191 and any SPI above 159 lands in the reserved block: driving one
+     * hits `assert(irq >= GIC_NR_SGIS)` after the line is folded back into that
+     * range. DISP MUTEX is SPI 160 (line 192), so it needs num-irq >= 224 + 32.
+     *
+     * The old 224 was fine only because nothing above SPI 159 was wired.
+     */
+    qdev_prop_set_uint32(s->gic, "num-irq", 256);
     qdev_prop_set_uint32(s->gic, "revision", 2);
     qdev_realize(s->gic, sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gic), 0, MT6589_GIC_DIST_BASE);
