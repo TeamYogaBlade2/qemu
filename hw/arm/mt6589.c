@@ -670,7 +670,23 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
          */
         uint32_t stored = s->spm_pwr_con[(offset - 0x6200) / 4];
 
-        return stored | 0xeu | ((stored & 0xf00u) ? 0xf000u : 0);
+        /*
+         * Bits 12:15 are the SRAM acknowledge, driven by hardware from SRAM_PDN -
+         * they are not storage, and returning whatever the guest last wrote there
+         * keeps them set for ever. That mattered because the power-on path reads the
+         * register, clears only SRAM_PDN and writes the result back, so the ack bits
+         * it had just read came back with it:
+         *
+         *     c0030c3c  ldr r2, [r3, #0x230]     ; read, ack set
+         *     c0030c40  bic r2, r2, #0xf00       ; clear SRAM_PDN only
+         *     c0030c44  str r2, [r3, #0x230]     ; ack bits written back
+         *     c0030c4c  ldr r2, [r3, #0x230]
+         *     c0030c50  tst r2, #0xf000
+         *     c0030c54  bne 0xc0030c4c           ; measured spinning here for ever
+         *
+         * (VENC's power-on, inside spm_mtcmos_ctrl_venc at 0xc0030ad8.)
+         */
+        return (stored & ~0xf000u) | 0xeu | ((stored & 0xf00u) ? 0xf000u : 0);
     }
 
     /*
