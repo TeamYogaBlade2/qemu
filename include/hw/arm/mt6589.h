@@ -310,6 +310,12 @@ struct Mt6589State {
     qemu_irq gpt_irq;
     QEMUTimer gpt_tick;
     uint32_t gpt_irqen;
+    /*
+     * SPM (0x1000_6000) MTCMOS power-control registers, keyed by
+     * (offset - 0x200) / 4 for the per-domain PWR_CON block. Only the parts a
+     * guest actually polls are modelled; see mt6589_peri_read().
+     */
+    uint32_t spm_pwr_con[16];
     uint32_t gpt_irqsta;
     struct {
         uint32_t con;

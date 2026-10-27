@@ -549,6 +549,8 @@ static const MemoryRegionOps mt6589_chipid_ops = {
  */
 static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 {
+    Mt6589State *s = opaque;
+
     /*
      * Poll detector. A driver that waits for a status bit this model never sets
      * spins on one address for ever, and the guest simply goes idle with no
@@ -572,6 +574,35 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
             last = offset;
             streak = 1;
         }
+    }
+    /*
+     * SPM (0x1000_6000): MTCMOS power domains.
+     *
+     * The kernel's SPM driver reads these before anything else, and a wrong
+     * answer is fatal rather than cosmetic:
+     *
+     *   test_spm_gpu_power_on()   mt_spm_mtcmos.c:947
+     *       val = spm_read(SPM_MFG_PWR_CON);
+     *       BUG_ON(!(val & PWR_ISO));        <- panics if the bit is clear
+     *
+     * Measured, that is what happened: "Kernel BUG at c0031908", "PC is at
+     * test_spm_gpu_power_on+0x15c", then "Kernel panic - not syncing: Fatal
+     * exception" and a watchdog-reset loop. With the whole peripheral window
+     * returning 0 the isolation bit was clear, so the first power-domain self
+     * test took the BUG path.
+     *
+     * So the domains read as up: PWR_STATUS and PWR_STATUS_S report every domain
+     * powered - what the boot chain leaves behind, and what makes that self test
+     * take its "already on, return 1" branch - and each domain's PWR_CON shows
+     * isolation plus both power-on bits. The GPU is out of scope; the power
+     * controller is not, because the kernel probes it.
+     */
+    if (offset >= 0x6200 && offset < 0x6240) {
+        /* PWR_ISO (bit 1) | PWR_ON (bit 2) | PWR_ON_S (bit 3) */
+        return s->spm_pwr_con[(offset - 0x6200) / 4] | 0xeu;
+    }
+    if (offset == 0x660c || offset == 0x6610) {   /* SPM_PWR_STATUS(_S) */
+        return 0xffffffffu;
     }
     /*
      * Keypad scan results. KP_MEM1..5 sit inside this window because the region
@@ -625,6 +656,12 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
                               unsigned size)
 {
     Mt6589State *s = opaque;
+
+    /* SPM MTCMOS power-control registers - see mt6589_peri_read(). */
+    if (offset >= 0x6200 && offset < 0x6240) {
+        s->spm_pwr_con[(offset - 0x6200) / 4] = (uint32_t)value;
+        return;
+    }
 
     qemu_log_mask(LOG_UNIMP, "%s: offset 0x%" HWADDR_PRIx " <- 0x%" PRIx64
                   " size %u\n", __func__, offset, value, size);
