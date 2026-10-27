@@ -346,6 +346,7 @@ struct Mt6589State {
      * transform is not known, so a block is passed through and logged. */
     MemoryRegion sej_iomem;
     MemoryRegion chipid_iomem;
+    MemoryRegion mcusys_iomem;
     uint32_t sej_status;
     uint32_t sej_data[0x3c];
     MemoryRegion peri_iomem;

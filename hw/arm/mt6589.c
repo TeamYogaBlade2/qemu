@@ -432,6 +432,66 @@ static void mt6589_chipid_write(void *opaque, hwaddr offset, uint64_t value,
                   HWADDR_PRIx "\n", __func__, value, offset);
 }
 
+/*
+ * MCUSYS slave-CPU release, 0x1000_2030..0x1000_204F.
+ *
+ * These addresses are inside the window the datasheet calls sramrom_reg
+ * (0x1000_2000, which documents only SEC_DOMAIN/SEC_VIO_STAT/SEC_VIO_ADDR at
+ * +0x00/+0x10/+0x14) and are not documented there, yet the ported kernel uses
+ * them to start its secondaries - mt-smp.c:
+ *
+ *     #define SLAVE_JUMP_REG   0xF0002034   (IO_VIRT_TO_PHYS -> 0x10002034)
+ *     #define SLAVE1_MAGIC_REG 0xF0002038
+ *     #define SLAVE1_MAGIC_NUM 0x534C4131
+ *
+ * platform_smp_prepare_cpus() puts the secondary entry point in SLAVE_JUMP_REG,
+ * then boot_secondary() writes a magic per CPU. They cannot live in the peri
+ * catch-all because this machine also maps SRAMBOOT RAM over 0x1000_2000, which
+ * swallowed them: instrumenting the catch-all showed the writes never arriving at
+ * all. A small overlay with a positive priority fixes that without disturbing the
+ * rest of SRAMBOOT.
+ */
+#define MT6589_MCUSYS_BASE   0x10002030
+#define MT6589_MCUSYS_SIZE   0x20
+
+static uint64_t mt6589_mcusys_read(void *opaque, hwaddr offset, unsigned size)
+{
+    Mt6589State *s = opaque;
+
+    if (offset == 0x04) {
+        return s->mcusys_jump;
+    }
+    return 0;
+}
+
+static void mt6589_mcusys_write(void *opaque, hwaddr offset, uint64_t value,
+                                unsigned size)
+{
+    Mt6589State *s = opaque;
+
+    if (offset == 0x04) {
+        s->mcusys_jump = value;
+        return;
+    }
+    if (offset == 0x08 || offset == 0x0c || offset == 0x10) {
+        static const uint32_t magic[3] = { 0x534C4131u, 0x4C415332u, 0x41534C33u };
+        int cpu = 1 + (offset - 0x08) / 4;
+
+        if ((uint32_t)value == magic[cpu - 1]) {
+            arm_set_cpu_on(cpu, s->mcusys_jump, 0, 1, false);
+        }
+        return;
+    }
+}
+
+static const MemoryRegionOps mt6589_mcusys_ops = {
+    .read = mt6589_mcusys_read,
+    .write = mt6589_mcusys_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+};
+
 static const MemoryRegionOps mt6589_chipid_ops = {
     .read = mt6589_chipid_read,
     .write = mt6589_chipid_write,
@@ -503,45 +563,6 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
 {
     Mt6589State *s = opaque;
 
-    /*
-     * MCUSYS slave-CPU release, phys 0x1000_2034 / 0x2038 / 0x203C / 0x2040.
-     *
-     * mediatek/platform/mt6589/kernel/core/mt-smp.c boot_secondary():
-     *
-     *     #define SLAVE_JUMP_REG   0xF0002034   (phys 0x10002034)
-     *     #define SLAVE1_MAGIC_REG 0xF0002038
-     *     #define SLAVE1_MAGIC_NUM 0x534C4131
-     *
-     *     mt65xx_reg_sync_writel(SLAVE1_MAGIC_NUM, SLAVE1_MAGIC_REG);  @ cpu 1
-     *     ... then it waits up to one second for pen_release to clear, and on
-     *     failure does on_each_cpu(dump_stack), which is what fills the log with
-     *     "CPU0: Unknown IPI message 0x0" once per retry.
-     *
-     * The kernel writes the secondary entry point (virt_to_phys of
-     * mt_secondary_startup) to SLAVE_JUMP_REG, so power the matching CPU on
-     * there when its magic appears. Without this the machine reports four CPUs
-     * (the kernel's [CORE] num:4) but only one ever runs.
-     */
-    switch (offset) {
-    case 0x2034:
-        s->mcusys_jump = value;
-        return;
-    case 0x2038:
-    case 0x203c:
-    case 0x2040: {
-        static const uint32_t magic[3] = { 0x534C4131u, 0x4C415332u, 0x41534C33u };
-        int cpu = 1 + (offset - 0x2038) / 4;
-
-        if ((uint32_t)value == magic[cpu - 1]) {
-            arm_set_cpu_on(cpu, s->mcusys_jump, 0, 1, false);
-            return;
-        }
-        break;
-    }
-    default:
-        break;
-    }
-
     qemu_log_mask(LOG_UNIMP, "%s: offset 0x%" HWADDR_PRIx " <- 0x%" PRIx64
                   " size %u\n", __func__, offset, value, size);
 }
@@ -599,6 +620,8 @@ static void mt6589_init(Object *obj)
                           "mt6589.sej", 0x1000);
     memory_region_init_io(&s->chipid_iomem, OBJECT(s), &mt6589_chipid_ops, s,
                           "mt6589.chipid", 0x10);
+    memory_region_init_io(&s->mcusys_iomem, OBJECT(s), &mt6589_mcusys_ops, s,
+                          "mt6589.mcusys", MT6589_MCUSYS_SIZE);
 }
 
 static void mt6589_realize(DeviceState *dev, Error **errp)
@@ -838,6 +861,12 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     /* Chip ID at 0x0800_0000 - see mt6589_chipid_read(). */
     memory_region_add_subregion(get_system_memory(), MT6589_CHIPID_BASE,
                                 &s->chipid_iomem);
+    /*
+     * Positive priority: this overlay sits on top of the SRAMBOOT RAM at
+     * 0x1000_2000 so the kernel's slave-release writes reach it.
+     */
+    memory_region_add_subregion_overlap(get_system_memory(), MT6589_MCUSYS_BASE,
+                                        &s->mcusys_iomem, 1);
 
     /*
      * Catch-all for the infrastructure and peripheral windows. The datasheet
