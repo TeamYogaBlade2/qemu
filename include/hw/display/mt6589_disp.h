@@ -84,6 +84,11 @@ struct Mt6589DispBlockState {
     struct Mt6589DispBlockState *rdma;
     /* The DDP routing block (0x1400_0000): decides which source reaches the panel. */
     struct Mt6589DispBlockState *config;
+    /*
+     * The SoC, for the M4U page-table base: the kernel hands the display M4U virtual
+     * addresses, not physical ones, so the composer has to translate before it can read.
+     */
+    struct Mt6589State *soc;
 };
 
 /* Create and map OVL, RDMA, COLOR and MUTEX. */

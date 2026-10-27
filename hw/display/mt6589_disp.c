@@ -672,6 +672,44 @@ static void mt6589_disp_dump(Mt6589DispBlockState *s, DisplaySurface *surface,
  * kernel takes over. Both are rendered here: whichever has an address and a pitch is
  * what the panel would be showing.
  */
+/*
+ * Translate a display address through the M4U.
+ *
+ * The kernel does not hand the display physical addresses: mtkfb maps its framebuffer and
+ * prints "[MTKFB] FB MVA is 0x00040000 PA is 0xBF600000", and the OVL then gets the MVA.
+ * A composer that reads the MVA as if it were physical reads whatever happens to live at
+ * 0x40000 - which is kernel text - and shows noise or nothing.
+ *
+ * The table format is measured, not assumed. The M4U's global block holds the page-table
+ * base at +0x10 (REG_MMUg_PT_BASE), and dumping it after a boot shows a flat table of 4 KiB
+ * pages: entry index = MVA >> 12, and
+ *
+ *     L1[0x040] = 0xbf60000a      MVA 0x40000 -> PA 0xbf600000
+ *
+ * which is exactly the mapping the driver reported. So the low bits are flags, the address
+ * is entry & ~0xfff, and 960 consecutive entries covered the mapped framebuffer.
+ */
+static hwaddr mt6589_disp_m4u(Mt6589DispBlockState *s, hwaddr addr)
+{
+    uint32_t table, entry = 0;
+
+    if (!s->soc || !addr || addr >= 0x80000000) {
+        return addr;            /* already physical, or nothing to translate */
+    }
+    table = s->soc->m4u_regs[0x0010 >> 2];
+    if (!table) {
+        return addr;
+    }
+    if (address_space_read(&address_space_memory, table + ((addr >> 12) << 2),
+                           MEMTXATTRS_UNSPECIFIED, &entry, 4) != MEMTX_OK) {
+        return addr;
+    }
+    if (!entry) {
+        return addr;            /* unmapped: leave it, the read will fail honestly */
+    }
+    return (entry & ~0xfffu) | (addr & 0xfffu);
+}
+
 static bool mt6589_disp_render_fb(Mt6589DispBlockState *s, hwaddr addr,
                                   uint32_t pitch, uint32_t size,
                                   uint32_t *dst, int stride_bytes, int dw, int dh)
@@ -698,7 +736,8 @@ static bool mt6589_disp_render_fb(Mt6589DispBlockState *s, hwaddr addr,
     for (int y = 0; y < lh; y++) {
         uint32_t *d = (uint32_t *)((uint8_t *)dst + (size_t)y * stride_bytes);
 
-        if (address_space_read(&address_space_memory, addr + (hwaddr)y * pitch,
+        if (address_space_read(&address_space_memory,
+                               mt6589_disp_m4u(s, addr + (hwaddr)y * pitch),
                                MEMTXATTRS_UNSPECIFIED, line,
                                (hwaddr)lw * bpp) != MEMTX_OK) {
             return false;
@@ -829,47 +868,10 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
     }
 
     for (int n = 0; from_ovl && n < OVL_NUM_LAYERS; n++) {
-        hwaddr addr = s->regs[OVL_L_ADDR(n) >> 2];
-        uint32_t pitch = s->regs[OVL_L_PITCH(n) >> 2];
-        uint32_t size = s->regs[OVL_L_SIZE(n) >> 2];
-        int lw, lh, bpp;
-
-        if (!addr || !pitch) {
-            continue;
-        }
-        lw = size & 0xffff;
-        lh = size >> 16;
-        if (!lw || !lh) {
-            lw = w;
-            lh = h;
-        }
-        bpp = pitch / lw;
-        if (bpp < 1 || bpp > 4) {
-            continue;
-        }
-        lw = MIN(lw, w);
-        lh = MIN(lh, h);
-        lw = MIN(lw, (int)(sizeof(line) / bpp));
-
-        if (mt6589_disp_log_enabled() && s->frame_count <= 1) {
-            fprintf(stderr, "DISP scanout layer %d: addr=%08" PRIx64
-                    " pitch=%u size=%dx%d bpp=%d\n", n, (uint64_t)addr, pitch,
-                    size & 0xffff, size >> 16, bpp);
-        }
-
-        for (int y = 0; y < lh; y++) {
-            uint32_t *d = dst + (size_t)y * (stride / 4);
-
-            if (address_space_read(&address_space_memory,
-                                   addr + (hwaddr)y * pitch,
-                                   MEMTXATTRS_UNSPECIFIED, line,
-                                   (hwaddr)lw * bpp) != MEMTX_OK) {
-                continue;
-            }
-            for (int x = 0; x < lw; x++) {
-                d[x] = mt6589_disp_cvt_pixel(line + x * bpp, bpp);
-            }
-        }
+        mt6589_disp_render_fb(s, s->regs[OVL_L_ADDR(n) >> 2],
+                              s->regs[OVL_L_PITCH(n) >> 2],
+                              s->regs[OVL_L_SIZE(n) >> 2],
+                              dst, stride, w, h);
     }
 
     /*
@@ -1334,5 +1336,6 @@ void mt6589_disp_create(Mt6589State *soc, DeviceState *gic)
     if (ovl) {
         ovl->rdma = rdma;
         ovl->config = cfg;
+        ovl->soc = soc;
     }
 }
