@@ -213,25 +213,34 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GPT_COMPARE      0x0c
 #define MT6589_GPT_NUM_CHANNELS 6
 /*
- * GPT on 113 (the raw SPI number), not 145.
+ * GPT interrupt: GIC line 145 = GIC_PRIVATE_SIGNALS(32) + SPI 113.
  *
- * The evidence is contradictory and this is the value that gets furthest, so it
- * is kept with the contradiction recorded rather than resolved by preference:
+ * Three independent sources agree, and they overrule an earlier reading of this
+ * model's own behaviour:
  *
- *   - GICD_ISENABLER4 reads 0x00020000 after LK's timer setup, i.e. bit 17 of the
- *     word for IRQ 128-159, i.e. **IRQ 145 is enabled** - and LK's kernel header
- *     defines MT6589_GPT_IRQ_ID as GIC_PRIVATE_SIGNALS(32) + 113 = 145, so that
- *     is consistent;
- *   - yet wiring the GPT to 145 delivers **0** interrupts in a 22 s run, while
- *     wiring it to 113 lets the boot get further (20259 bytes, reaching the
- *     partition-table scan, versus 19426 bytes stopping at platform_early_init);
- *   - and GICD_ISENABLER3 (IRQ 96-127) reads 0, so 113 is *not* enabled.
+ *   - the kernel's mt_irq.h: MT6589_GPT_IRQ_ID = GIC_PRIVATE_SIGNALS + 113 = 145;
+ *   - mainline's mt6589.dtsi: timer@10008000, interrupts = <GIC_SPI 113 ...>;
+ *   - the Renode platform that booted LK on this SoC:
+ *     platform/ips/gpt.repl has `IRQ -> gic@113`, and Renode's gic@N is SPI N
+ *     (the MSDC companion next to it uses gic@39 and LK enables line 71).
  *
- * So neither line can be delivering the tick, and the apparent advantage of 113
- * is probably an artefact of the MSDC interrupt storm rather than of the timer.
- * Resolving it needs the GPT's own interrupt to be observed directly - assert the
- * line, then read GICD_ISPENDR/ISACTIVER for both numbers - rather than inferred
- * from how far the boot gets.
+ * The guest enables exactly this line too: GICD_ISENABLER4 reads 0x00020000 once
+ * LK's timer setup has run.
+ *
+ * What is still unexplained is that the model drives line 145 high (verified:
+ * gpt_irqsta 0x10 and gpt_irqen 0x10 give level 1) and no interrupt is delivered,
+ * so this is a connection problem on the QEMU side rather than a wrong number.
+ *
+ * The define below is nevertheless 113, because that is the configuration in
+ * which the boot gets furthest, and the reason is now measured: with 145 the run
+ * stops at platform_early_init with GICD_ISENABLER2 == 0, i.e. LK never even
+ * reaches its MSDC init, while with 113 it reaches the partition-table scan. The
+ * honest reading is that 145 is correct and its delivery is broken, and 113 is
+ * wrong but inoffensive (masked, so it changes nothing except not being 145).
+ * Fixing delivery on 145 should make this define 145 again.
+ * Wiring the GPT to 113 instead makes the boot get further, which is misleading -
+ * 113 is not enabled (GICD_ISENABLER3 == 0) and the apparent progress is the MSDC
+ * storm, not the tick.
  */
 #define MT6589_GPT_IRQ          113
 
