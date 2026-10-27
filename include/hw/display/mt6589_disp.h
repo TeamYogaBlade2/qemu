@@ -68,6 +68,7 @@ struct Mt6589DispBlockState {
     uint32_t frame_count;
     bool in_gfx_update;
     uint32_t last_sum;      /* checksum of the last frame written to disk */
+    bool dumped_content;    /* the file on disk has a picture, not a blank */
     /*
      * The DISP mutex raises an event at every frame start, which is what the panel
      * pipe and its clients synchronise on. Modelling it as a periodic line is the

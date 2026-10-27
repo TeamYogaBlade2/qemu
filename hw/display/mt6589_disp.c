@@ -645,10 +645,30 @@ static void mt6589_disp_dump(Mt6589DispBlockState *s, DisplaySurface *surface,
      * an unattended check then compares against a blank. Measured: a run that had rendered the
      * boot logo left an all-black file.
      */
-    if (sum == s->last_sum) {
+    /*
+     * Write when the picture changes, and also every hundred frames while the frame has
+     * content. Content-only periodic writes are the part that matters: the guest switches
+     * framebuffers and the kernel later clears the path, so a periodic write of a blank frame
+     * would replace the picture with nothing - but waiting for a change alone means the file
+     * exists only if the frame timer happened to sample inside the window where the guest's
+     * drawing was on screen, and that window is short.
+     */
+    bool periodic_content = sum != 0 && (s->frame_count % 100) == 0;
+
+    if (sum == s->last_sum && !periodic_content) {
+        return;
+    }
+    /*
+     * Never replace a picture with a blank. The guest switches framebuffers - LK double-buffers
+     * its logo and the kernel then clears the path - so "last frame written" and "last frame
+     * with something in it" are different things, and only the second is worth keeping for a
+     * human looking at the file or a check comparing against it.
+     */
+    if (!sum && s->dumped_content) {
         return;
     }
     s->last_sum = sum;
+    s->dumped_content = (sum != 0);
     tmp = g_strdup_printf("%s.tmp", path);
     f = fopen(tmp, "wb");
     if (!f) {
