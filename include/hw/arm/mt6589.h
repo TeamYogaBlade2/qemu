@@ -316,6 +316,8 @@ struct Mt6589State {
      * guest actually polls are modelled; see mt6589_peri_read().
      */
     uint32_t spm_pwr_con[16];
+    /* SPM_PWR_STATUS(_S): one bit per MTCMOS domain, MD1 (bit 0) off. */
+    uint32_t spm_status;
     uint32_t gpt_irqsta;
     struct {
         uint32_t con;

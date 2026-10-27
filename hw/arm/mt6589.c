@@ -597,12 +597,37 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
      * isolation plus both power-on bits. The GPU is out of scope; the power
      * controller is not, because the kernel probes it.
      */
-    if (offset >= 0x6200 && offset < 0x6240) {
-        /* PWR_ISO (bit 1) | PWR_ON (bit 2) | PWR_ON_S (bit 3) */
-        return s->spm_pwr_con[(offset - 0x6200) / 4] | 0xeu;
+    if (offset >= 0x6200 && offset < 0x62a0) {
+        /*
+         * PWR_ISO (bit 1) | PWR_ON (bit 2) | PWR_ON_S (bit 3), plus the SRAM
+         * acknowledge bits (12:15) which hardware raises once the SRAM power-down
+         * requested in SRAM_PDN (bits 8:11) has completed.
+         *
+         * The ack has to track SRAM_PDN rather than being always-on: the
+         * power-down path waits for it to become set
+         *
+         *     spm_write(PWR_CON, spm_read(PWR_CON) | SRAM_PDN);
+         *     while ((spm_read(PWR_CON) & ISP_SRAM_ACK) != ISP_SRAM_ACK) { }
+         *
+         * while the power-up path waits for it to clear, so a stuck ack would
+         * hang the opposite direction. Without any ack at all, measured, PID 1
+         * spun for ever in that loop at "[mt_subsys_init]SYS_ISP, change state".
+         */
+        uint32_t stored = s->spm_pwr_con[(offset - 0x6200) / 4];
+
+        return stored | 0xeu | ((stored & 0xf00u) ? 0xf000u : 0);
     }
     if (offset == 0x660c || offset == 0x6610) {   /* SPM_PWR_STATUS(_S) */
-        return 0xffffffffu;
+        /*
+         * The modem is reported off and everything else on. That is the state the
+         * boot chain leaves behind, with one deliberate difference: MD1 has no
+         * hardware behind it here, and reporting it as on makes
+         * mt_subsys_init() try to power it *down*, which waits for an
+         * acknowledge the absent modem can never give - measured, PID 1 went idle
+         * after "[mt_subsys_init]SYS_MD1, change state: (1->0)" and jiffies
+         * advanced to 33 s with no further output.
+         */
+        return s->spm_status;
     }
     /*
      * Keypad scan results. KP_MEM1..5 sit inside this window because the region
@@ -658,8 +683,43 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
     Mt6589State *s = opaque;
 
     /* SPM MTCMOS power-control registers - see mt6589_peri_read(). */
-    if (offset >= 0x6200 && offset < 0x6240) {
-        s->spm_pwr_con[(offset - 0x6200) / 4] = (uint32_t)value;
+    if (offset >= 0x6200 && offset < 0x62a0) {
+        /*
+         * Each domain's PWR_CON drives its bit in SPM_PWR_STATUS. The pairs come
+         * from mt_clkmgr.c's syss[] table (sta_mask) and mt_spm.h (ctl_addr),
+         * with this window's base at 0x1000_6000:
+         *
+         *   MD1 0x284 bit0   MD2 0x280 bit1   DPY 0x240 bit2   DIS 0x23c bit3
+         *   MFG 0x214 bit4   ISP 0x238 bit5   IFR 0x234 bit6   VEN 0x230 bit7
+         *   VDE 0x210 bit8
+         *
+         * Tracking all of them is what lets mt_subsys_init() power a domain down
+         * and see the status clear. Handling only the GPU and the display got the
+         * boot one domain further each time - measured, it went MD1 -> MD2 -> MFG
+         * -> ISP as each was fixed, because each power-down waits for its own
+         * status bit.
+         */
+        static const struct {
+            uint16_t off;
+            uint8_t bit;
+        } spm_domains[] = {
+            { 0x6284, 0 }, { 0x6280, 1 }, { 0x6240, 2 }, { 0x623c, 3 },
+            { 0x6214, 4 }, { 0x6238, 5 }, { 0x6234, 6 }, { 0x6230, 7 },
+            { 0x6210, 8 },
+        };
+        unsigned idx = (offset - 0x6200) / 4;
+        uint32_t on = (uint32_t)value & 0xcu;   /* PWR_ON | PWR_ON_S */
+
+        s->spm_pwr_con[idx] = (uint32_t)value;
+        for (size_t i = 0; i < ARRAY_SIZE(spm_domains); i++) {
+            if (spm_domains[i].off == offset) {
+                uint32_t mask = 1u << spm_domains[i].bit;
+
+                s->spm_status = on ? (s->spm_status | mask)
+                                   : (s->spm_status & ~mask);
+                break;
+            }
+        }
         return;
     }
 
@@ -691,6 +751,15 @@ static const MemoryRegionOps mt6589_peri_ops = {
 static void mt6589_init(Object *obj)
 {
     Mt6589State *s = MT6589(obj);
+
+    /*
+     * SPM power-domain status: everything up except the two modem domains, which
+     * have no hardware behind them here - see the note in mt6589_peri_read().
+     * Status bits from mt_spm_mtcmos.c: MD1 = 1 << 0, MD2 = 1 << 1, DPY = 1 << 2,
+     * DIS = 1 << 3, MFG = 1 << 4, ISP = 1 << 5, IFR = 1 << 6, VEN = 1 << 7,
+     * VDE = 1 << 8.
+     */
+    s->spm_status = 0xffffffffu & ~0x13u;
 
     memory_region_init_io(&s->gpt_iomem, OBJECT(s), &mt6589_gpt_ops, s,
                           "mt6589.gpt", 0x1000);
