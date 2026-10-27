@@ -42,6 +42,7 @@
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
 #include "system/dma.h"
+#include "target/arm/cpu.h"
 
 /* MSDC_CFG */
 #define MSDC_CFG_MODE       (1u << 0)
@@ -936,6 +937,16 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     return 0;
 }
 
+static bool mt6589_msdc_log_enabled(void)
+{
+    static int enabled = -1;
+
+    if (enabled < 0) {
+        enabled = getenv("MT6589_MSDC_LOG") != NULL;
+    }
+    return enabled;
+}
+
 static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
                               unsigned size)
 {
@@ -1102,6 +1113,17 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         qemu_log_mask(LOG_UNIMP, "%s: CMD %u arg 0x%08x (slot %s)\n",
                       __func__, (unsigned)(value & 0x3f), s->sdc_arg,
                       s->name);
+        /*
+         * MT6589_MSDC_LOG=1 with the guest PC, because the interesting question about a card
+         * command is who issued it: a retry loop of the same block range can be the driver's own
+         * logic or a model mis-staging the data, and the PC says which.
+         */
+        if (mt6589_msdc_log_enabled()) {
+            uint32_t pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
+
+            fprintf(stderr, "MSDC %s CMD %2u arg 0x%08x pc=%08" PRIx32 "\n",
+                    s->name, (unsigned)(value & 0x3f), s->sdc_arg, pc);
+        }
         /* The command is executed on the write, and BUSY is raised so a guest
          * that polls SDC_STS sees the same sequence as on hardware. */
         s->sdc_sts |= 0x1u;
