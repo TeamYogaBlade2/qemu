@@ -40,6 +40,42 @@
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
+#include "hw/arm/mt6589-regs/mt6589-topckgen-regs.h"
+
+/*
+ * Register offsets come from the generated header, which is extracted from the
+ * datasheet's own register tables. TOPRGU shares the 0x1000_0000 page with
+ * TOPCKGEN - that is why the macros below are MT6589_TOPCKGEN_WDT_*: the
+ * generator groups by 4 KiB page, and both blocks live in the same one. The
+ * names are ugly but the addresses are right, and the static asserts at the end
+ * of this block make any disagreement a build error rather than a silent
+ * difference between the model and the datasheet.
+ */
+#define RGU_WDT_MODE       (MT6589_TOPCKGEN_WDT_MODE - MT6589_TOPCKGEN_BASE)
+#define RGU_WDT_LENGTH     (MT6589_TOPCKGEN_WDT_LENGTH - MT6589_TOPCKGEN_BASE)
+#define RGU_WDT_RESTART    (MT6589_TOPCKGEN_WDT_RESTART - MT6589_TOPCKGEN_BASE)
+#define RGU_WDT_STA        (MT6589_TOPCKGEN_WDT_STA - MT6589_TOPCKGEN_BASE)
+#define RGU_WDT_INTERVAL   (MT6589_TOPCKGEN_WDT_INTERVAL - MT6589_TOPCKGEN_BASE)
+#define RGU_WDT_SWRST      (MT6589_TOPCKGEN_WDT_SWRST - MT6589_TOPCKGEN_BASE)
+#define RGU_WDT_SWSYSRST   (MT6589_TOPCKGEN_WDT_SWSYSRST - MT6589_TOPCKGEN_BASE)
+
+/*
+ * The remaining offsets have no datasheet register table, so they stay local and
+ * are marked as such. They are holes the driver pokes, not documented registers.
+ */
+#define RGU_WDT_NONRST_REG 0x20   /* not in the datasheet register table */
+#define RGU_WDT_REQ_MODE   0x30   /* not in the datasheet register table */
+#define RGU_WDT_REQ_IRQ_EN 0x34   /* not in the datasheet register table */
+#define RGU_WDT_DRAMC_CTL  0x40   /* not in the datasheet register table */
+
+/* The model must agree with the datasheet on every offset it uses. */
+QEMU_BUILD_BUG_ON(RGU_WDT_MODE != 0x00);
+QEMU_BUILD_BUG_ON(RGU_WDT_LENGTH != 0x04);
+QEMU_BUILD_BUG_ON(RGU_WDT_RESTART != 0x08);
+QEMU_BUILD_BUG_ON(RGU_WDT_STA != 0x0c);
+QEMU_BUILD_BUG_ON(RGU_WDT_INTERVAL != 0x10);
+QEMU_BUILD_BUG_ON(RGU_WDT_SWRST != 0x14);
+QEMU_BUILD_BUG_ON(RGU_WDT_SWSYSRST != 0x18);
 
 #define RGU_WDT_MODE       0x00
 #define RGU_WDT_LENGTH     0x04

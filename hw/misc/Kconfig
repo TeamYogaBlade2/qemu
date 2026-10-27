@@ -280,6 +280,10 @@ config MT6589_EFUSE
     bool
     default y
 
+config MT6589_AUXADC
+    bool
+    default y
+
 config MT6589_PWRAP
     bool
     default y

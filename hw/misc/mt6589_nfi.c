@@ -39,20 +39,53 @@
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
 
-/* NFI, base 0x1100_1000 */
-#define NFI_CNFG      0x00
-#define NFI_PAGEFMT   0x04
-#define NFI_CON       0x08
-#define NFI_ACCCON    0x0c
-#define NFI_INTR_EN   0x10
-#define NFI_INTR      0x14
-#define NFI_CMD       0x20
-#define NFI_ADDRNOB   0x30
-#define NFI_COLADDR   0x34
-#define NFI_ROWADDR   0x38
-#define NFI_STA       0x60
-#define NFI_FIFOSTA   0x64
-#define NFI_FDM0L     0x80
+#include "hw/arm/mt6589-regs/mt6589-nfi-regs.h"
+
+/*
+ * NFI, base 0x1100_1000.
+ *
+ * The datasheet puts this block at 0xC100_1000 and the generated header repeats
+ * that. It is wrong: the preloader's mt6589.h has NFI_BASE = IO_PHYS +
+ * 0x01001000 = 0x1100_1000, and that preloader runs on this hardware. The
+ * document printed the high nibble as 0xC where 0x1 belongs (0xC1001000 &
+ * 0x0FFFFFFF == 0x01001000). So the *offsets* come from the generated header and
+ * the base stays here, with a build-time check that they still agree.
+ */
+#define NFI_OFF(x)    ((x) - 0xc1001000u)
+#define NFI_CNFG      NFI_OFF(MT6589_NFI_NFI_CNFG)
+#define NFI_PAGEFMT   NFI_OFF(MT6589_NFI_NFI_PAGEFMT)
+#define NFI_CON       NFI_OFF(MT6589_NFI_NFI_CON)
+#define NFI_ACCCON    NFI_OFF(MT6589_NFI_NFI_ACCCON)
+#define NFI_INTR_EN   NFI_OFF(MT6589_NFI_NFI_INTR_EN)
+#define NFI_INTR      NFI_OFF(MT6589_NFI_NFI_INTR)
+#define NFI_CMD       NFI_OFF(MT6589_NFI_NFI_CMD)
+#define NFI_ADDRNOB   NFI_OFF(MT6589_NFI_NFI_ADDRNOB)
+#define NFI_COLADDR   NFI_OFF(MT6589_NFI_NFI_COLADDR)
+#define NFI_ROWADDR   NFI_OFF(MT6589_NFI_NFI_ROWADDR)
+#define NFI_STA       NFI_OFF(MT6589_NFI_NFI_STA)
+#define NFI_FIFOSTA   NFI_OFF(MT6589_NFI_NFI_FIFOSTA)
+/*
+ * NFI_FDM0L is at 0x0A0, not 0x080. The datasheet, the preloader's
+ * mtk_nand_core.h (NFI_FDM0L_REG32 = NFI_BASE + 0x00A0), LK's mtk_nand.h and
+ * mainline's mtk_nand.c (NFI_FDML(x) = 0xA0 + ...) all agree on 0xA0, and this
+ * file had 0x80 - so the free-data bytes a driver reads back came from the
+ * wrong register.
+ */
+#define NFI_FDM0L     NFI_OFF(MT6589_NFI_NFI_FDM0L)
+
+QEMU_BUILD_BUG_ON(NFI_CNFG != 0x00);
+QEMU_BUILD_BUG_ON(NFI_PAGEFMT != 0x04);
+QEMU_BUILD_BUG_ON(NFI_CON != 0x08);
+QEMU_BUILD_BUG_ON(NFI_ACCCON != 0x0c);
+QEMU_BUILD_BUG_ON(NFI_INTR_EN != 0x10);
+QEMU_BUILD_BUG_ON(NFI_INTR != 0x14);
+QEMU_BUILD_BUG_ON(NFI_CMD != 0x20);
+QEMU_BUILD_BUG_ON(NFI_ADDRNOB != 0x30);
+QEMU_BUILD_BUG_ON(NFI_COLADDR != 0x34);
+QEMU_BUILD_BUG_ON(NFI_ROWADDR != 0x38);
+QEMU_BUILD_BUG_ON(NFI_STA != 0x60);
+QEMU_BUILD_BUG_ON(NFI_FIFOSTA != 0x64);
+QEMU_BUILD_BUG_ON(NFI_FDM0L != 0xa0);
 
 /*
  * NFIECC, base 0x1100_2000. The encoder and decoder are separate register

@@ -27,6 +27,7 @@
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
 #include "hw/misc/mt6589_efuse.h"
+#include "hw/misc/mt6589_auxadc.h"
 #include "hw/display/mt6589_disp.h"
 #include "hw/misc/mt6589_pwrap.h"
 #include "qom/object.h"
@@ -261,6 +262,7 @@ struct Mt6589State {
     Mt6589NfiState *nfi;
     Mt6589ToprguState *toprgu;
     Mt6589EfuseState *efuse;
+    Mt6589AuxAdcState *auxadc;
     Mt6589PwrapState *pwrap;
     Mt6589DramcState *dramc;
     Mt6589DramcState *ddrphy;

@@ -574,6 +574,17 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     qdev_realize(DEVICE(s->efuse), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->efuse), 0, MT6589_EFUSE_BASE);
 
+    /*
+     * AUXADC. LK reads the battery channel before it will continue: with no
+     * conversion it times out, takes the zero as 0 mV, decides
+     * "is_low_battery, TRUE" and answers with mt_power_off, which then spins
+     * asking for a charger. See hw/misc/mt6589_auxadc.c.
+     */
+    s->auxadc = MT6589_AUXADC(object_new(TYPE_MT6589_AUXADC));
+    object_property_add_child(OBJECT(s), "auxadc", OBJECT(s->auxadc));
+    qdev_realize(DEVICE(s->auxadc), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->auxadc), 0, MT6589_AUXADC_BASE);
+
     /* Display subsystem: OVL, RDMA, COLOR, MUTEX. */
     mt6589_disp_create(s, s->gic);
 

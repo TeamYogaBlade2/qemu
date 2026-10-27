@@ -1,0 +1,684 @@
+/*
+ * eint - generated from the MT6589 datasheet by
+ * mt6589-emulator/tools/gen_regs_header.py.  DO NOT EDIT.
+ *
+ * page 0x1000b000, 141 registers.
+ *
+ * Extract this page with tools/extract_all_regs.py, which is the
+ * only pipeline that sees every register: it ignores the
+ * datasheet's unreliable module headings and groups by address.
+ */
+#ifndef HW_ARM_EINT_REGS_H
+#define HW_ARM_EINT_REGS_H
+
+#define MT6589_EINT_BASE 0x1000b000u
+
+/* 0x0000  EINT_STA0 - External interrupt status register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_STA0 0x1000b000u
+#define MT6589_EINT_EINT_STA0_RESET 0x00000000u
+
+/* 0x0004  EINT_STA1 - External interrupt status register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_STA1 0x1000b004u
+#define MT6589_EINT_EINT_STA1_RESET 0x00000000u
+
+/* 0x0008  EINT_STA2 - External interrupt status register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_STA2 0x1000b008u
+#define MT6589_EINT_EINT_STA2_RESET 0x00000000u
+
+/* 0x000c  EINT_STA3 - External interrupt status register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_STA3 0x1000b00cu
+#define MT6589_EINT_EINT_STA3_RESET 0x00000000u
+
+/* 0x0010  EINT_STA4 - External interrupt status register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_STA4 0x1000b010u
+#define MT6589_EINT_EINT_STA4_RESET 0x00000000u
+#define MT6589_EINT_EINT_STA4_EINT_PEND4_SHIFT 0
+#define MT6589_EINT_EINT_STA4_EINT_PEND4_MASK  0xffffffffu
+
+/* 0x0014  EINT_STA5 - External interrupt status register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_STA5 0x1000b014u
+#define MT6589_EINT_EINT_STA5_RESET 0x00000000u
+
+/* 0x0040  EINT_ACK0 - External interrupt acknowledge register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_ACK0 0x1000b040u
+#define MT6589_EINT_EINT_ACK0_RESET 0x00000000u
+
+/* 0x0044  EINT_ACK1 - External interrupt acknowledge register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_ACK1 0x1000b044u
+#define MT6589_EINT_EINT_ACK1_RESET 0x00000000u
+
+/* 0x0048  EINT_ACK2 - External interrupt acknowledge register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_ACK2 0x1000b048u
+#define MT6589_EINT_EINT_ACK2_RESET 0x00000000u
+
+/* 0x004c  EINT_ACK3 - External interrupt acknowledge register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_ACK3 0x1000b04cu
+#define MT6589_EINT_EINT_ACK3_RESET 0x00000000u
+
+/* 0x0050  EINT_ACK4 - External interrupt acknowledge register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_ACK4 0x1000b050u
+#define MT6589_EINT_EINT_ACK4_RESET 0x00000000u
+
+/* 0x0054  EINT_ACK5 - External interrupt acknowledge register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_ACK5 0x1000b054u
+#define MT6589_EINT_EINT_ACK5_RESET 0x00000000u
+
+/* 0x0080  EINT_MASK0 - External interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_MASK0 0x1000b080u
+#define MT6589_EINT_EINT_MASK0_RESET 0xffffffffu
+#define MT6589_EINT_EINT_MASK0_EINT_MASK0_SHIFT 0
+#define MT6589_EINT_EINT_MASK0_EINT_MASK0_MASK  0xffffffffu
+
+/* 0x0084  EINT_MASK1 - External interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_MASK1 0x1000b084u
+#define MT6589_EINT_EINT_MASK1_RESET 0xffffffffu
+#define MT6589_EINT_EINT_MASK1_EINT_MASK1_SHIFT 0
+#define MT6589_EINT_EINT_MASK1_EINT_MASK1_MASK  0xffffffffu
+
+/* 0x0088  EINT_MASK2 - External interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_MASK2 0x1000b088u
+#define MT6589_EINT_EINT_MASK2_RESET 0xffffffffu
+
+/* 0x008c  EINT_MASK3 - External interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_MASK3 0x1000b08cu
+#define MT6589_EINT_EINT_MASK3_RESET 0xffffffffu
+#define MT6589_EINT_EINT_MASK3_EINT_MASK3_SHIFT 0
+#define MT6589_EINT_EINT_MASK3_EINT_MASK3_MASK  0xffffffffu
+
+/* 0x0090  EINT_MASK4 - External interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_MASK4 0x1000b090u
+#define MT6589_EINT_EINT_MASK4_RESET 0xffffffffu
+#define MT6589_EINT_EINT_MASK4_EINT_MASK4_SHIFT 0
+#define MT6589_EINT_EINT_MASK4_EINT_MASK4_MASK  0xffffffffu
+
+/* 0x0094  EINT_MASK5 - External interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_MASK5 0x1000b094u
+#define MT6589_EINT_EINT_MASK5_RESET 0xffffffffu
+#define MT6589_EINT_EINT_MASK5_EINT_MASK5_SHIFT 0
+#define MT6589_EINT_EINT_MASK5_EINT_MASK5_MASK  0xffffffffu
+
+/* 0x00c0  EINT_MASK_SET0 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_SET0 0x1000b0c0u
+#define MT6589_EINT_EINT_MASK_SET0_RESET 0x00000000u
+
+/* 0x00c4  EINT_MASK_SET1 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_SET1 0x1000b0c4u
+#define MT6589_EINT_EINT_MASK_SET1_RESET 0x00000000u
+
+/* 0x00c8  EINT_MASK_SET2 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_SET2 0x1000b0c8u
+#define MT6589_EINT_EINT_MASK_SET2_RESET 0x00000000u
+
+/* 0x00cc  EINT_MASK_SET3 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_SET3 0x1000b0ccu
+#define MT6589_EINT_EINT_MASK_SET3_RESET 0x00000000u
+
+/* 0x00d0  EINT_MASK_SET4 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_SET4 0x1000b0d0u
+#define MT6589_EINT_EINT_MASK_SET4_RESET 0x00000000u
+
+/* 0x00d4  EINT_MASK_SET5 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_SET5 0x1000b0d4u
+#define MT6589_EINT_EINT_MASK_SET5_RESET 0x00000000u
+
+/* 0x0100  EINT_MASK_CLR0 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_CLR0 0x1000b100u
+#define MT6589_EINT_EINT_MASK_CLR0_RESET 0x00000000u
+
+/* 0x0104  EINT_MASK_CLR1 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_CLR1 0x1000b104u
+#define MT6589_EINT_EINT_MASK_CLR1_RESET 0x00000000u
+
+/* 0x0108  EINT_MASK_CLR2 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_CLR2 0x1000b108u
+#define MT6589_EINT_EINT_MASK_CLR2_RESET 0x00000000u
+
+/* 0x010c  EINT_MASK_CLR3 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_CLR3 0x1000b10cu
+#define MT6589_EINT_EINT_MASK_CLR3_RESET 0x00000000u
+
+/* 0x0110  EINT_MASK_CLR4 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_CLR4 0x1000b110u
+#define MT6589_EINT_EINT_MASK_CLR4_RESET 0x00000000u
+
+/* 0x0114  EINT_MASK_CLR5 - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_MASK_CLR5 0x1000b114u
+#define MT6589_EINT_EINT_MASK_CLR5_RESET 0x00000000u
+
+/* 0x0140  EINT_SENS0 - External interrupt sensitivity register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_SENS0 0x1000b140u
+#define MT6589_EINT_EINT_SENS0_RESET 0xffffffffu
+#define MT6589_EINT_EINT_SENS0_EINT_SENS0_SHIFT 0
+#define MT6589_EINT_EINT_SENS0_EINT_SENS0_MASK  0xffffffffu
+
+/* 0x0144  EINT_SENS1 - External interrupt sensitivity register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_SENS1 0x1000b144u
+#define MT6589_EINT_EINT_SENS1_RESET 0xffffffffu
+#define MT6589_EINT_EINT_SENS1_EINT_SENS1_SHIFT 0
+#define MT6589_EINT_EINT_SENS1_EINT_SENS1_MASK  0xffffffffu
+
+/* 0x0148  EINT_SENS2 - External interrupt sensitivity register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_SENS2 0x1000b148u
+#define MT6589_EINT_EINT_SENS2_RESET 0xffffffffu
+#define MT6589_EINT_EINT_SENS2_EINT_SENS2_SHIFT 0
+#define MT6589_EINT_EINT_SENS2_EINT_SENS2_MASK  0xffffffffu
+
+/* 0x014c  EINT_SENS3 - External interrupt sensitivity register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_SENS3 0x1000b14cu
+#define MT6589_EINT_EINT_SENS3_RESET 0xffffffffu
+#define MT6589_EINT_EINT_SENS3_EINT_SENS3_SHIFT 0
+#define MT6589_EINT_EINT_SENS3_EINT_SENS3_MASK  0xffffffffu
+
+/* 0x0150  EINT_SENS4 - External interrupt sensitivity register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_SENS4 0x1000b150u
+#define MT6589_EINT_EINT_SENS4_RESET 0xffffffffu
+#define MT6589_EINT_EINT_SENS4_EINT_SENS4_SHIFT 0
+#define MT6589_EINT_EINT_SENS4_EINT_SENS4_MASK  0xffffffffu
+
+/* 0x0154  EINT_SENS5 - External interrupt sensitivity register  [reset 0xffffffffu] */
+#define MT6589_EINT_EINT_SENS5 0x1000b154u
+#define MT6589_EINT_EINT_SENS5_RESET 0xffffffffu
+
+/* 0x0180  EINT_SENS_SET0 - External interrupt sensitivity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_SET0 0x1000b180u
+#define MT6589_EINT_EINT_SENS_SET0_RESET 0x00000000u
+
+/* 0x0184  EINT_SENS_SET1 - External interrupt sensitivity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_SET1 0x1000b184u
+#define MT6589_EINT_EINT_SENS_SET1_RESET 0x00000000u
+
+/* 0x0188  EINT_SENS_SET2 - External interrupt sensitivity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_SET2 0x1000b188u
+#define MT6589_EINT_EINT_SENS_SET2_RESET 0x00000000u
+
+/* 0x018c  EINT_SENS_SET3 - External interrupt sensitivity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_SET3 0x1000b18cu
+#define MT6589_EINT_EINT_SENS_SET3_RESET 0x00000000u
+
+/* 0x0190  EINT_SENS_SET4 - External interrupt sensitivity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_SET4 0x1000b190u
+#define MT6589_EINT_EINT_SENS_SET4_RESET 0x00000000u
+
+/* 0x0194  EINT_SENS_SET5 - External interrupt sensitivity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_SET5 0x1000b194u
+#define MT6589_EINT_EINT_SENS_SET5_RESET 0x00000000u
+
+/* 0x01c0  EINT_SENS_CLR0 - External interrupt sensitivity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_CLR0 0x1000b1c0u
+#define MT6589_EINT_EINT_SENS_CLR0_RESET 0x00000000u
+
+/* 0x01c4  EINT_SENS_CLR1 - External interrupt sensitivity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_CLR1 0x1000b1c4u
+#define MT6589_EINT_EINT_SENS_CLR1_RESET 0x00000000u
+
+/* 0x01c8  EINT_SENS_CLR2 - External interrupt sensitivity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_CLR2 0x1000b1c8u
+#define MT6589_EINT_EINT_SENS_CLR2_RESET 0x00000000u
+
+/* 0x01cc  EINT_SENS_CLR3 - External interrupt sensitivity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_CLR3 0x1000b1ccu
+#define MT6589_EINT_EINT_SENS_CLR3_RESET 0x00000000u
+
+/* 0x01d0  EINT_SENS_CLR4 - External interrupt sensitivity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_CLR4 0x1000b1d0u
+#define MT6589_EINT_EINT_SENS_CLR4_RESET 0x00000000u
+
+/* 0x01d4  EINT_SENS_CLR5 - External interrupt sensitivity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SENS_CLR5 0x1000b1d4u
+#define MT6589_EINT_EINT_SENS_CLR5_RESET 0x00000000u
+
+/* 0x0200  EINT_SOFT0 - Software interrupt register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT0 0x1000b200u
+#define MT6589_EINT_EINT_SOFT0_RESET 0x00000000u
+#define MT6589_EINT_EINT_SOFT0_EINT_SOFT0_SHIFT 0
+#define MT6589_EINT_EINT_SOFT0_EINT_SOFT0_MASK  0xffffffffu
+
+/* 0x0204  EINT_SOFT1 - Software interrupt register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT1 0x1000b204u
+#define MT6589_EINT_EINT_SOFT1_RESET 0x00000000u
+
+/* 0x0208  EINT_SOFT2 - Software interrupt register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT2 0x1000b208u
+#define MT6589_EINT_EINT_SOFT2_RESET 0x00000000u
+#define MT6589_EINT_EINT_SOFT2_EINT_SOFT2_SHIFT 0
+#define MT6589_EINT_EINT_SOFT2_EINT_SOFT2_MASK  0xffffffffu
+
+/* 0x020c  EINT_SOFT3 - Software interrupt register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT3 0x1000b20cu
+#define MT6589_EINT_EINT_SOFT3_RESET 0x00000000u
+#define MT6589_EINT_EINT_SOFT3_EINT_SOFT3_SHIFT 0
+#define MT6589_EINT_EINT_SOFT3_EINT_SOFT3_MASK  0xffffffffu
+
+/* 0x0210  EINT_SOFT4 - Software interrupt register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT4 0x1000b210u
+#define MT6589_EINT_EINT_SOFT4_RESET 0x00000000u
+#define MT6589_EINT_EINT_SOFT4_EINT_SOFT4_SHIFT 0
+#define MT6589_EINT_EINT_SOFT4_EINT_SOFT4_MASK  0xffffffffu
+
+/* 0x0214  EINT_SOFT5 - Software interrupt register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT5 0x1000b214u
+#define MT6589_EINT_EINT_SOFT5_RESET 0x00000000u
+
+/* 0x0240  EINT_SOFT_SET0 - Software interrupt set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_SET0 0x1000b240u
+#define MT6589_EINT_EINT_SOFT_SET0_RESET 0x00000000u
+
+/* 0x0244  EINT_SOFT_SET1 - Software interrupt set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_SET1 0x1000b244u
+#define MT6589_EINT_EINT_SOFT_SET1_RESET 0x00000000u
+
+/* 0x0248  EINT_SOFT_SET2 - Software interrupt set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_SET2 0x1000b248u
+#define MT6589_EINT_EINT_SOFT_SET2_RESET 0x00000000u
+
+/* 0x024c  EINT_SOFT_SET3 - Software interrupt set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_SET3 0x1000b24cu
+#define MT6589_EINT_EINT_SOFT_SET3_RESET 0x00000000u
+
+/* 0x0250  EINT_SOFT_SET4 - Software interrupt set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_SET4 0x1000b250u
+#define MT6589_EINT_EINT_SOFT_SET4_RESET 0x00000000u
+
+/* 0x0254  EINT_SOFT_SET5 - Software interrupt set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_SET5 0x1000b254u
+#define MT6589_EINT_EINT_SOFT_SET5_RESET 0x00000000u
+
+/* 0x0280  EINT_SOFT_CLR0 - Software interrupt clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_CLR0 0x1000b280u
+#define MT6589_EINT_EINT_SOFT_CLR0_RESET 0x00000000u
+
+/* 0x0284  EINT_SOFT_CLR1 - Software interrupt clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_CLR1 0x1000b284u
+#define MT6589_EINT_EINT_SOFT_CLR1_RESET 0x00000000u
+
+/* 0x0288  EINT_SOFT_CLR2 - Software interrupt clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_CLR2 0x1000b288u
+#define MT6589_EINT_EINT_SOFT_CLR2_RESET 0x00000000u
+
+/* 0x028c  EINT_SOFT_CLR3 - Software interrupt clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_CLR3 0x1000b28cu
+#define MT6589_EINT_EINT_SOFT_CLR3_RESET 0x00000000u
+
+/* 0x0290  EINT_SOFT_CLR4 - Software interrupt clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_CLR4 0x1000b290u
+#define MT6589_EINT_EINT_SOFT_CLR4_RESET 0x00000000u
+
+/* 0x0294  EINT_SOFT_CLR5 - Software interrupt clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_SOFT_CLR5 0x1000b294u
+#define MT6589_EINT_EINT_SOFT_CLR5_RESET 0x00000000u
+
+/* 0x0300  EINT_POL0 - External interrupt polarity register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL0 0x1000b300u
+#define MT6589_EINT_EINT_POL0_RESET 0x00000000u
+#define MT6589_EINT_EINT_POL0_EINT_POL0_SHIFT 0
+#define MT6589_EINT_EINT_POL0_EINT_POL0_MASK  0xffffffffu
+
+/* 0x0304  EINT_POL1 - External interrupt polarity register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL1 0x1000b304u
+#define MT6589_EINT_EINT_POL1_RESET 0x00000000u
+#define MT6589_EINT_EINT_POL1_EINT_POL1_SHIFT 0
+#define MT6589_EINT_EINT_POL1_EINT_POL1_MASK  0xffffffffu
+
+/* 0x0308  EINT_POL2 - External interrupt polarity register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL2 0x1000b308u
+#define MT6589_EINT_EINT_POL2_RESET 0x00000000u
+#define MT6589_EINT_EINT_POL2_EINT_POL2_SHIFT 0
+#define MT6589_EINT_EINT_POL2_EINT_POL2_MASK  0xffffffffu
+
+/* 0x030c  EINT_POL3 - External interrupt polarity register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL3 0x1000b30cu
+#define MT6589_EINT_EINT_POL3_RESET 0x00000000u
+#define MT6589_EINT_EINT_POL3_EINT_POL3_SHIFT 0
+#define MT6589_EINT_EINT_POL3_EINT_POL3_MASK  0xffffffffu
+
+/* 0x0310  EINT_POL4 - External interrupt polarity register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL4 0x1000b310u
+#define MT6589_EINT_EINT_POL4_RESET 0x00000000u
+
+/* 0x0314  EINT_POL5 - External interrupt polarity register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL5 0x1000b314u
+#define MT6589_EINT_EINT_POL5_RESET 0x00000000u
+#define MT6589_EINT_EINT_POL5_EINT_POL5_SHIFT 0
+#define MT6589_EINT_EINT_POL5_EINT_POL5_MASK  0xffffffffu
+
+/* 0x0340  EINT_POL_SET0 - External interrupt polarity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_SET0 0x1000b340u
+#define MT6589_EINT_EINT_POL_SET0_RESET 0x00000000u
+
+/* 0x0344  EINT_POL_SET1 - External interrupt polarity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_SET1 0x1000b344u
+#define MT6589_EINT_EINT_POL_SET1_RESET 0x00000000u
+
+/* 0x0348  EINT_POL_SET2 - External interrupt polarity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_SET2 0x1000b348u
+#define MT6589_EINT_EINT_POL_SET2_RESET 0x00000000u
+
+/* 0x034c  EINT_POL_SET3 - External interrupt polarity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_SET3 0x1000b34cu
+#define MT6589_EINT_EINT_POL_SET3_RESET 0x00000000u
+
+/* 0x0350  EINT_POL_SET4 - External interrupt polarity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_SET4 0x1000b350u
+#define MT6589_EINT_EINT_POL_SET4_RESET 0x00000000u
+
+/* 0x0354  EINT_POL_SET5 - External interrupt polarity set register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_SET5 0x1000b354u
+#define MT6589_EINT_EINT_POL_SET5_RESET 0x00000000u
+
+/* 0x0380  EINT_POL_CLR0 - External interrupt polarity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_CLR0 0x1000b380u
+#define MT6589_EINT_EINT_POL_CLR0_RESET 0x00000000u
+
+/* 0x0384  EINT_POL_CLR1 - External interrupt polarity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_CLR1 0x1000b384u
+#define MT6589_EINT_EINT_POL_CLR1_RESET 0x00000000u
+
+/* 0x0388  EINT_POL_CLR2 - External interrupt polarity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_CLR2 0x1000b388u
+#define MT6589_EINT_EINT_POL_CLR2_RESET 0x00000000u
+
+/* 0x038c  EINT_POL_CLR3 - External interrupt polarity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_CLR3 0x1000b38cu
+#define MT6589_EINT_EINT_POL_CLR3_RESET 0x00000000u
+
+/* 0x0390  EINT_POL_CLR4 - External interrupt polarity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_CLR4 0x1000b390u
+#define MT6589_EINT_EINT_POL_CLR4_RESET 0x00000000u
+
+/* 0x0394  EINT_POL_CLR5 - External interrupt polarity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_POL_CLR5 0x1000b394u
+#define MT6589_EINT_EINT_POL_CLR5_RESET 0x00000000u
+
+/* 0x0400  EINT_D0EN0 - Domain 0 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D0EN0 0x1000b400u
+#define MT6589_EINT_EINT_D0EN0_RESET 0x00000000u
+
+/* 0x0404  EINT_D0EN1 - Domain 0 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D0EN1 0x1000b404u
+#define MT6589_EINT_EINT_D0EN1_RESET 0x00000000u
+
+/* 0x0408  EINT_D0EN2 - Domain 0 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D0EN2 0x1000b408u
+#define MT6589_EINT_EINT_D0EN2_RESET 0x00000000u
+
+/* 0x040c  EINT_D0EN3 - Domain 0 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D0EN3 0x1000b40cu
+#define MT6589_EINT_EINT_D0EN3_RESET 0x00000000u
+
+/* 0x0410  EINT_D0EN4 - Domain 0 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D0EN4 0x1000b410u
+#define MT6589_EINT_EINT_D0EN4_RESET 0x00000000u
+
+/* 0x0414  EINT_D0EN5 - Domain 0 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D0EN5 0x1000b414u
+#define MT6589_EINT_EINT_D0EN5_RESET 0x00000000u
+
+/* 0x0420  EINT_D1EN0 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D1EN0 0x1000b420u
+#define MT6589_EINT_EINT_D1EN0_RESET 0x00000000u
+
+/* 0x0424  EINT_D1EN1 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D1EN1 0x1000b424u
+#define MT6589_EINT_EINT_D1EN1_RESET 0x00000000u
+
+/* 0x0428  EINT_D1EN2 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D1EN2 0x1000b428u
+#define MT6589_EINT_EINT_D1EN2_RESET 0x00000000u
+
+/* 0x042c  EINT_D1EN3 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D1EN3 0x1000b42cu
+#define MT6589_EINT_EINT_D1EN3_RESET 0x00000000u
+
+/* 0x0430  EINT_D1EN4 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D1EN4 0x1000b430u
+#define MT6589_EINT_EINT_D1EN4_RESET 0x00000000u
+
+/* 0x0434  EINT_D1EN5 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D1EN5 0x1000b434u
+#define MT6589_EINT_EINT_D1EN5_RESET 0x00000000u
+
+/* 0x0440  EINT_D2EN0 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D2EN0 0x1000b440u
+#define MT6589_EINT_EINT_D2EN0_RESET 0x00000000u
+
+/* 0x0444  EINT_D2EN1 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D2EN1 0x1000b444u
+#define MT6589_EINT_EINT_D2EN1_RESET 0x00000000u
+
+/* 0x0448  EINT_D2EN2 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D2EN2 0x1000b448u
+#define MT6589_EINT_EINT_D2EN2_RESET 0x00000000u
+
+/* 0x044c  EINT_D2EN3 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D2EN3 0x1000b44cu
+#define MT6589_EINT_EINT_D2EN3_RESET 0x00000000u
+
+/* 0x0450  EINT_D2EN4 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D2EN4 0x1000b450u
+#define MT6589_EINT_EINT_D2EN4_RESET 0x00000000u
+
+/* 0x0454  EINT_D2EN5 - Domain 1 external interrupt enable control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_D2EN5 0x1000b454u
+#define MT6589_EINT_EINT_D2EN5_RESET 0x00000000u
+
+/* 0x0500  EINT_DBNC_30  [reset 0x1000b50cu] */
+#define MT6589_EINT_EINT_DBNC_30 0x1000b500u
+#define MT6589_EINT_EINT_DBNC_30_RESET 0x1000b50cu
+
+/* 0x0504  EINT_DBNC_31 */
+#define MT6589_EINT_EINT_DBNC_31 0x1000b504u
+#define MT6589_EINT_EINT_DBNC_31_RESET 0x00000000u
+
+/* 0x0508  EINT_DBNC_32 */
+#define MT6589_EINT_EINT_DBNC_32 0x1000b508u
+#define MT6589_EINT_EINT_DBNC_32_RESET 0x00000000u
+
+/* 0x050c  EINT_DBNC_33  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_DBNC_33 0x1000b50cu
+#define MT6589_EINT_EINT_DBNC_33_RESET 0x00000000u
+
+/* 0x0600  EINT_DBNC_SET0  [reset 0x1000b60cu] */
+#define MT6589_EINT_EINT_DBNC_SET0 0x1000b600u
+#define MT6589_EINT_EINT_DBNC_SET0_RESET 0x1000b60cu
+
+/* 0x0604  EINT_DBNC_SET1 */
+#define MT6589_EINT_EINT_DBNC_SET1 0x1000b604u
+#define MT6589_EINT_EINT_DBNC_SET1_RESET 0x00000000u
+
+/* 0x0608  EINT_DBNC_SET2 */
+#define MT6589_EINT_EINT_DBNC_SET2 0x1000b608u
+#define MT6589_EINT_EINT_DBNC_SET2_RESET 0x00000000u
+
+/* 0x060c  EINT_DBNC_SET_3_0 - [n] (n=0~3) External interrupt debounce control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_DBNC_SET_3_0 0x1000b60cu
+#define MT6589_EINT_EINT_DBNC_SET_3_0_RESET 0x00000000u
+
+/* 0x0700  EINT_DBNC_CLR0  [reset 0x1000b70cu] */
+#define MT6589_EINT_EINT_DBNC_CLR0 0x1000b700u
+#define MT6589_EINT_EINT_DBNC_CLR0_RESET 0x1000b70cu
+
+/* 0x0704  EINT_DBNC_CLR1 */
+#define MT6589_EINT_EINT_DBNC_CLR1 0x1000b704u
+#define MT6589_EINT_EINT_DBNC_CLR1_RESET 0x00000000u
+
+/* 0x0708  EINT_DBNC_CLR2 */
+#define MT6589_EINT_EINT_DBNC_CLR2 0x1000b708u
+#define MT6589_EINT_EINT_DBNC_CLR2_RESET 0x00000000u
+
+/* 0x070c  EINT_DBNC_CLR_3_0 - [n] (n=0~3) External interrupt debounce control register  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_DBNC_CLR_3_0 0x1000b70cu
+#define MT6589_EINT_EINT_DBNC_CLR_3_0_RESET 0x00000000u
+
+/* 0x0a00  PMIC_EINT_STA - External interrupt status register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_STA 0x1000ba00u
+#define MT6589_EINT_PMIC_EINT_STA_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_STA_PMIC_EINT_STA_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_STA_PMIC_EINT_STA_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_STA_PMIC_EINT_STA_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_STA_PMIC_EINT_STA_15_0__MASK  0x0000ffffu
+
+/* 0x0a08  PMIC_EINT_ACK - External interrupt acknowledgement register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_ACK 0x1000ba08u
+#define MT6589_EINT_PMIC_EINT_ACK_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_ACK_PMIC_EINT_ACK_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_ACK_PMIC_EINT_ACK_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_ACK_PMIC_EINT_ACK_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_ACK_PMIC_EINT_ACK_15_0__MASK  0x0000ffffu
+
+/* 0x0a10  PMIC_EINT_EEVT - External interrupt event status register  [reset 0x00000001u] */
+#define MT6589_EINT_PMIC_EINT_EEVT 0x1000ba10u
+#define MT6589_EINT_PMIC_EINT_EEVT_RESET 0x00000001u
+#define MT6589_EINT_PMIC_EINT_EEVT_PMIC_EINT_EEVT_SHIFT 0
+#define MT6589_EINT_PMIC_EINT_EEVT_PMIC_EINT_EEVT_MASK  0x0000ffffu
+
+/* 0x0a18  PMIC_EINT_MASK - External interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_PMIC_EINT_MASK 0x1000ba18u
+#define MT6589_EINT_PMIC_EINT_MASK_RESET 0xffffffffu
+#define MT6589_EINT_PMIC_EINT_MASK_PMIC_EINT_MASK_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_MASK_PMIC_EINT_MASK_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_MASK_PMIC_EINT_MASK_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_MASK_PMIC_EINT_MASK_15_0__MASK  0x0000ffffu
+
+/* 0x0a20  PMIC_EINT_MASK_SET - External interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_MASK_SET 0x1000ba20u
+#define MT6589_EINT_PMIC_EINT_MASK_SET_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_MASK_SET_PMIC_EINT_MASK_SET_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_MASK_SET_PMIC_EINT_MASK_SET_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_MASK_SET_PMIC_EINT_MASK_SET_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_MASK_SET_PMIC_EINT_MASK_SET_15_0__MASK  0x0000ffffu
+
+/* 0x0a28  PMIC_EINT_MASK_CLR - External interrupt mask clear register M E D I A T E K  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_MASK_CLR 0x1000ba28u
+#define MT6589_EINT_PMIC_EINT_MASK_CLR_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_MASK_CLR_PMIC_EINT_MASK_CLR_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_MASK_CLR_PMIC_EINT_MASK_CLR_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_MASK_CLR_PMIC_EINT_MASK_CLR_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_MASK_CLR_PMIC_EINT_MASK_CLR_15_0__MASK  0x0000ffffu
+
+/* 0x0a30  PMIC_EINT_SENS - External interrupt sensitivity register  [reset 0xffffffffu] */
+#define MT6589_EINT_PMIC_EINT_SENS 0x1000ba30u
+#define MT6589_EINT_PMIC_EINT_SENS_RESET 0xffffffffu
+#define MT6589_EINT_PMIC_EINT_SENS_PMIC_EINT_SENS_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_SENS_PMIC_EINT_SENS_31_16__MASK  0xffff0000u
+
+/* 0x0a38  PMIC_EINT_SENS_SET - External interrupt sensitivity set register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_SENS_SET 0x1000ba38u
+#define MT6589_EINT_PMIC_EINT_SENS_SET_RESET 0x00000000u
+
+/* 0x0a40  PMIC_EINT_SENS_CLR - External interrupt sensitivity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_SENS_CLR 0x1000ba40u
+#define MT6589_EINT_PMIC_EINT_SENS_CLR_RESET 0x00000000u
+
+/* 0x0a48  PMIC_EINT_POL - External interrupt polarity register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_POL 0x1000ba48u
+#define MT6589_EINT_PMIC_EINT_POL_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_POL_PMIC_EINT_POL_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_POL_PMIC_EINT_POL_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_POL_PMIC_EINT_POL_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_POL_PMIC_EINT_POL_15_0__MASK  0x0000ffffu
+
+/* 0x0a50  PMIC_EINT_POL_SET - External interrupt polarity set register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_POL_SET 0x1000ba50u
+#define MT6589_EINT_PMIC_EINT_POL_SET_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_POL_SET_PMIC_EINT_POL_SET_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_POL_SET_PMIC_EINT_POL_SET_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_POL_SET_PMIC_EINT_POL_SET_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_POL_SET_PMIC_EINT_POL_SET_15_0__MASK  0x0000ffffu
+
+/* 0x0a58  PMIC_EINT_POL_CLR - External interrupt polarity clear register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_POL_CLR 0x1000ba58u
+#define MT6589_EINT_PMIC_EINT_POL_CLR_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_POL_CLR_PMIC_EINT_POL_CLR_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_POL_CLR_PMIC_EINT_POL_CLR_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_POL_CLR_PMIC_EINT_POL_CLR_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_POL_CLR_PMIC_EINT_POL_CLR_15_0__MASK  0x0000ffffu
+
+/* 0x0a60  PMIC_EINT_D0EN  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_D0EN 0x1000ba60u
+#define MT6589_EINT_PMIC_EINT_D0EN_RESET 0x00000000u
+
+/* 0x0a68  PMIC_EINT_D1EN  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_D1EN 0x1000ba68u
+#define MT6589_EINT_PMIC_EINT_D1EN_RESET 0x00000000u
+
+/* 0x0a70  PMIC_EINT_D2EN  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_D2EN 0x1000ba70u
+#define MT6589_EINT_PMIC_EINT_D2EN_RESET 0x00000000u
+
+/* 0x0b00  DPMIC_EINT_MASK - Direct coupled external interrupt mask register  [reset 0xffffffffu] */
+#define MT6589_EINT_DPMIC_EINT_MASK 0x1000bb00u
+#define MT6589_EINT_DPMIC_EINT_MASK_RESET 0xffffffffu
+
+/* 0x0b10  DPMIC_EINT_MASK_SET - Direct coupled external interrupt mask set register  [reset 0x00000000u] */
+#define MT6589_EINT_DPMIC_EINT_MASK_SET 0x1000bb10u
+#define MT6589_EINT_DPMIC_EINT_MASK_SET_RESET 0x00000000u
+
+/* 0x0b20  DPMIC_EINT_MASK_CLR - Direct coupled external interrupt mask clear register  [reset 0x00000000u] */
+#define MT6589_EINT_DPMIC_EINT_MASK_CLR 0x1000bb20u
+#define MT6589_EINT_DPMIC_EINT_MASK_CLR_RESET 0x00000000u
+
+/* 0x0c14  PMIC_EINT_INPUT_MUX_SET - Select EINT source from register set register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET 0x1000bc14u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_PMIC_EINT_INPUT_MUX_SET_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_PMIC_EINT_INPUT_MUX_SET_15_0__MASK  0x0000ffffu
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_PMIC_EINT_INPUT_MUX_CLR_31_16__SHIFT 16
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_PMIC_EINT_INPUT_MUX_CLR_31_16__MASK  0xffff0000u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_PMIC_EINT_INPUT_MUX_CLR_15_0_M_SHIFT 15
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_PMIC_EINT_INPUT_MUX_CLR_15_0_M_MASK  0x00008000u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_E_SHIFT 14
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_E_MASK  0x00004000u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_D_SHIFT 13
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_D_MASK  0x00002000u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_I_SHIFT 12
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_I_MASK  0x00001000u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_A_SHIFT 11
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_A_MASK  0x00000800u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_T_SHIFT 10
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_T_MASK  0x00000400u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_E_SHIFT 9
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_E_MASK  0x00000200u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_K_SHIFT 0
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_SET_K_MASK  0x000001ffu
+
+/* 0x0c18  PMIC_EINT_INPUT_MUX_CLR - Select EINT source from register clear register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_CLR 0x1000bc18u
+#define MT6589_EINT_PMIC_EINT_INPUT_MUX_CLR_RESET 0x00000000u
+
+/* 0x0c24  PMIC_EINT_INPUT_SOFT_SET - EINT source register set register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_SET 0x1000bc24u
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_SET_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_SET_PMIC_EINT_INPUT_SOFT_SET_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_SET_PMIC_EINT_INPUT_SOFT_SET_15_0__MASK  0x0000ffffu
+
+/* 0x0c28  PMIC_EINT_INPUT_SOFT_CLR - EINT source register clear register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_CLR 0x1000bc28u
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_CLR_RESET 0x00000000u
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_CLR_PMIC_EINT_INPUT_SOFT_CLR_15_0__SHIFT 0
+#define MT6589_EINT_PMIC_EINT_INPUT_SOFT_CLR_PMIC_EINT_INPUT_SOFT_CLR_15_0__MASK  0x0000ffffu
+
+/* 0x0c30  PMIC_EINT_EVENT_CLR - PMIC EINT event clear set register  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_EVENT_CLR 0x1000bc30u
+#define MT6589_EINT_PMIC_EINT_EVENT_CLR_RESET 0x00000000u
+
+/* 0x0c34  PMIC_EINT_BYPASS_IDLE - PMIC EINT'S bypass CG cell  [reset 0x00000000u] */
+#define MT6589_EINT_PMIC_EINT_BYPASS_IDLE 0x1000bc34u
+#define MT6589_EINT_PMIC_EINT_BYPASS_IDLE_RESET 0x00000000u
+
+/* 0x0ce0  EINT_PMIC_REG_ADR - PMIC's register read address  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_PMIC_REG_ADR 0x1000bce0u
+#define MT6589_EINT_EINT_PMIC_REG_ADR_RESET 0x00000000u
+
+/* 0x0ce4  EINT_PMIC_REG_RDATA - PMIC's register read data  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_PMIC_REG_RDATA 0x1000bce4u
+#define MT6589_EINT_EINT_PMIC_REG_RDATA_RESET 0x00000000u
+#define MT6589_EINT_EINT_PMIC_REG_RDATA_EINT_PMIC_REG_RDATA_SHIFT 0
+#define MT6589_EINT_EINT_PMIC_REG_RDATA_EINT_PMIC_REG_RDATA_MASK  0x0000ffffu
+
+/* 0x0ce8  EINT_PMIC_REG_RDY - PMIC's register read ready  [reset 0x00000000u] */
+#define MT6589_EINT_EINT_PMIC_REG_RDY 0x1000bce8u
+#define MT6589_EINT_EINT_PMIC_REG_RDY_RESET 0x00000000u
+
+#define MT6589_EINT_NUM_REGS 141
+
+#endif /* HW_ARM_EINT_REGS_H */
