@@ -79,6 +79,13 @@ struct Mt6589DispBlockState {
     QEMUTimer vsync_timer;
     uint32_t vsync_count;
     /*
+     * DSI and DPI raise their own events once per frame, separately from the mutex. The bit
+     * assignments of their INTSTA are not documented here, so the model raises whatever the
+     * guest enabled - see mt6589_disp_panel_tick().
+     */
+    QEMUTimer panel_timer;
+    uint32_t panel_count;
+    /*
      * The OVL is the composer, but the read DMA is a separate block instance and is what
      * the kernel actually drives. The composer needs to see it, so create() links the two.
      */

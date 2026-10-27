@@ -515,8 +515,8 @@ static const Mt6589DispBlock mt6589_disp_blocks[] = {
     BLOCK("wdma",  0x14004000, mt6589_wdma_regs,  0),
     BLOCK("bls",   0x14008000, mt6589_bls_regs,   0),
     BLOCK("gamma", 0x14009000, mt6589_gamma_regs, 0),
-    BLOCK("dsi",   0x1400d000, mt6589_dsi_regs,   0),
-    BLOCK("dpi",   0x1400e000, mt6589_dpi_regs,   0),
+    BLOCK("dsi",   0x1400d000, mt6589_dsi_regs,   204),
+    BLOCK("dpi",   0x1400e000, mt6589_dpi_regs,   205),
 };
 
 /* ------------------------------------------------------------------------- */
@@ -996,6 +996,19 @@ static const GraphicHwOps mt6589_ovl_gfx_ops = {
 static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
 {
     Mt6589DispBlockState *s = opaque;
+    static int read_log = -1;
+
+    /*
+     * MT6589_DISP_READ_LOG=1 traces reads as well as writes. A guest that is waiting is usually
+     * polling a status register, and the write trace shows what it configured but not what it is
+     * waiting on - that is in the reads.
+     */
+    if (read_log < 0) {
+        read_log = getenv("MT6589_DISP_READ_LOG") != NULL;
+    }
+    if (read_log) {
+        fprintf(stderr, "DISP %-5s R %04" HWADDR_PRIx "\n", s->desc->name, offset);
+    }
     const Mt6589DispReg *r = find_reg(s->desc, offset);
 
     if (!r) {
@@ -1064,6 +1077,53 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
  * level be status & enable is the same rule used by the MSDC model and by the
  * generic path below.
  */
+
+/*
+ * DSI and DPI events.
+ *
+ * Both interfaces raise interrupts of their own, and a framebuffer driver that waits for the
+ * first vsync waits on one of them rather than on the mutex. The datasheet's bit assignments for
+ * these INTSTA registers are not established, so rather than pick a bit and call it vsync, the
+ * model raises exactly the events the guest has enabled: status = enable, once per frame, and the
+ * line is (status & enable) as everywhere else. A driver that asked for an event gets one; nothing
+ * is invented about which bit means what.
+ */
+static void mt6589_disp_panel_irq(Mt6589DispBlockState *s)
+{
+    uint32_t en = s->regs[0x0008 >> 2];
+    uint32_t sta = s->regs[0x000c >> 2];
+
+    if (s->desc->has_irq) {
+        qemu_set_irq(s->irq, (en & sta) != 0);
+    }
+}
+
+static void mt6589_disp_panel_tick(void *opaque)
+{
+    Mt6589DispBlockState *s = opaque;
+    uint32_t en = s->regs[0x0008 >> 2];
+
+    if (!en) {
+        return;                 /* nothing enabled: stop until the guest asks again */
+    }
+    s->panel_count++;
+    s->regs[0x000c >> 2] |= en;
+    mt6589_disp_panel_irq(s);
+    timer_mod(&s->panel_timer,
+              qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + OVL_FRAME_NS);
+}
+
+static void mt6589_disp_panel_kick(Mt6589DispBlockState *s)
+{
+    if (!s->desc->has_irq || !s->regs[0x0008 >> 2]) {
+        return;
+    }
+    if (!timer_pending(&s->panel_timer)) {
+        timer_mod(&s->panel_timer,
+                  qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + OVL_FRAME_NS);
+    }
+}
+
 static void mt6589_disp_mutex_update_irq(Mt6589DispBlockState *s)
 {
     /* MUTEX_INTEN at 0x0000, MUTEX_INTSTA at 0x0004. */
@@ -1257,6 +1317,14 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
     if (s->desc->base == 0x14003000) {
         mt6589_ovl_kick(s);
     }
+    /* DSI/DPI: an enable written here starts their per-frame events. */
+    if (s->desc->base == 0x1400d000 || s->desc->base == 0x1400e000) {
+        if (offset == 0x0008) {
+            mt6589_disp_panel_kick(s);
+        } else if (offset == 0x000c) {
+            mt6589_disp_panel_irq(s);
+        }
+    }
 }
 
 static const MemoryRegionOps mt6589_disp_ops = {
@@ -1300,6 +1368,10 @@ static void mt6589_disp_realize(DeviceState *dev, Error **errp)
     if (s->desc->base == 0x14011000) {
         timer_init_ns(&s->vsync_timer, QEMU_CLOCK_VIRTUAL,
                       mt6589_disp_mutex_vsync, s);
+    }
+    if (s->desc->base == 0x1400d000 || s->desc->base == 0x1400e000) {
+        timer_init_ns(&s->panel_timer, QEMU_CLOCK_VIRTUAL,
+                      mt6589_disp_panel_tick, s);
     }
 }
 
