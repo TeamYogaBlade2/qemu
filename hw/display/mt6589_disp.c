@@ -638,7 +638,14 @@ static void mt6589_disp_dump(Mt6589DispBlockState *s, DisplaySurface *surface,
             sum = sum * 31u + row[x];
         }
     }
-    if (sum == s->last_sum) {
+    /*
+     * Write when the picture changes, and also every hundred frames (five seconds at 20 Hz)
+     * regardless. Change-triggered alone is not enough for an unattended check: the frame has
+     * to be observed *while it has content*, and whether that happens depends on how the
+     * guest's programming interleaves with the frame timer - measured, a run that stopped
+     * scanning early left no file at all even though the guest had drawn a full logo.
+     */
+    if (sum == s->last_sum && (s->frame_count % 100)) {
         return;
     }
     s->last_sum = sum;
