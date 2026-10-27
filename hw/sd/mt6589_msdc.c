@@ -268,6 +268,7 @@ static void mt6589_msdc_dma_run(Mt6589MsdcState *s)
     uint32_t gpd = s->dma_sa;
     uint32_t written = 0;
 
+
     if (!gpd) {
         return;
     }
@@ -787,6 +788,33 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         return;
     case MSDC_PS:
         s->ps = (uint32_t)value & (MSDC_PS_CDEN | MSDC_PS_CDDEBOUNCE);
+        return;
+    /*
+     * DMA register writes. These were missing from this handler, so every write
+     * to MSDC_DMA_SA (0x90), MSDC_DMA_CFG (0x9c) and MSDC_DMA_CTRL (0x98) fell
+     * through to the default arm and was dropped: dma_sa stayed 0 and the START
+     * trigger never called mt6589_msdc_dma_run(). LK then waited for a
+     * completion from a transfer that had never been started, which is exactly
+     * what "the guest sits in arch_idle forever" looks like.
+     *
+     * LK's msdc_dma_start() (0x81e0810c) reads 0x98, clears bit 0 and sets it
+     * again, then writes - an unconditional store - so this handler must treat a
+     * write with START set as the trigger and read START back as 0.
+     */
+    case MSDC_DMA_SA:
+        s->dma_sa = value;
+        return;
+    case MSDC_DMA_CFG:
+        s->dma_cfg = value;
+        return;
+    case MSDC_DMA_CTRL:
+        if (value & MSDC_DMA_CTRL_START) {
+            mt6589_msdc_dma_run(s);
+            /* START is a trigger, not state: read it back clear. */
+            s->dma_ctrl = value & ~MSDC_DMA_CTRL_START;
+        } else {
+            s->dma_ctrl = value & ~MSDC_DMA_CTRL_START;
+        }
         return;
     case MSDC_INT:
         return;
