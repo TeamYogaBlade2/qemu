@@ -639,13 +639,13 @@ static void mt6589_disp_dump(Mt6589DispBlockState *s, DisplaySurface *surface,
         }
     }
     /*
-     * Write when the picture changes, and also every hundred frames (five seconds at 20 Hz)
-     * regardless. Change-triggered alone is not enough for an unattended check: the frame has
-     * to be observed *while it has content*, and whether that happens depends on how the
-     * guest's programming interleaves with the frame timer - measured, a run that stopped
-     * scanning early left no file at all even though the guest had drawn a full logo.
+     * Change-triggered only. A periodic write as well seemed safer - a recent file is always
+     * there - but it is actively worse: the guest keeps switching framebuffers, so the
+     * periodic write replaces a frame that had the picture with a later one that does not, and
+     * an unattended check then compares against a blank. Measured: a run that had rendered the
+     * boot logo left an all-black file.
      */
-    if (sum == s->last_sum && (s->frame_count % 100)) {
+    if (sum == s->last_sum) {
         return;
     }
     s->last_sum = sum;
