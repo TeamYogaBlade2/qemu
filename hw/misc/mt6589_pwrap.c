@@ -189,6 +189,52 @@ static const struct Mt6589PwrapDefault mt6589_pmic_defaults[] = {
     { 0x00A2, 0x0000 },
 
     /*
+     * PMIC-side AUXADC, registers 0x0512..0x0530 (wire 0x0289.. and so on).
+     *
+     * This is a DIFFERENT thing from the SoC's AUXADC at 0x1100_3000, and the
+     * two share the macro name AUXADC_CON0 in LK's headers - mt_pmic.h maps it to
+     * PMIC 0x0540 while mtk_auxadc_hw.h maps it to the SoC block. Battery and
+     * charger voltages come from THIS one, read over PWRAP:
+     *
+     *   mt_pmic.c: upmu_get_rg_adc_rdy_c0() -> pmic_read_interface(AUXADC_ADC0,
+     *              PMIC_RG_ADC_RDY_C0_MASK=0x1, PMIC_RG_ADC_RDY_C0_SHIFT=15)
+     *   then:      while (upmu_get_rg_adc_rdy_c0() != 1) { ... "Time out!" }
+     *
+     * So bit 15 of PMIC 0x0512 must read set or LK reports a timeout, takes the
+     * sample as 0, concludes "is_low_battery, TRUE" and calls mt_power_off,
+     * which spins asking for a charger a desktop host cannot provide.
+     *
+     * Layout, from mt_pmic.h:
+     *   PMIC_RG_ADC_OUT_C0_MASK  0x3FF, shift 0   <- the 10-bit sample
+     *   PMIC_RG_ADC_RDY_C0_MASK  0x1,   shift 15  <- ready
+     *
+     * The sample is the battery voltage through a divider. blade10's
+     * cust_battery.h sets R_BAT_SENSE = 4 and mt_pmic.h has VOLTAGE_FULL_RANGE
+     * 1200 over ADC_PRECISE 1024, so
+     *
+     *     mV = raw * 4 * 1200 / 1024
+     *
+     * and raw 896 reads back as 4200 mV - a charged battery. That matters
+     * because LK's is_low_battery() (mt_bat_bq24196.c) compares against
+     * BATTERY_LOWVOL_THRESOLD 3450 and, below it, calls mt_power_off, which then
+     * spins waiting for a charger that a desktop host cannot provide.
+     *
+     * 0x8000 | 896 = 0x8380.
+     */
+    { 0x0289, 0x8380 },   /* PMIC 0x0512 AUXADC_ADC0: RDY_C0 | 896 -> 4200 mV */
+    { 0x028A, 0x8380 },   /* PMIC 0x0514 AUXADC_ADC1 */
+    { 0x028B, 0x8380 },   /* PMIC 0x0516 AUXADC_ADC2 */
+    /*
+     * The trim variant, which is what LK actually reads. Its call passes
+     * trimd = 1, so PMIC_IMM_GetOneChannelValue() takes the
+     * upmu_get_rg_adc_out_c0_trim() branch - AUXADC_ADC11 (0x0528, wire 0x294)
+     * with PMIC_RG_ADC_OUT_C0_TRIM_MASK 0x3FF at shift 0. Setting only ADC0 left
+     * ret_data reading 0, i.e. a flat battery, even though the ready bit was
+     * set and the timeout was gone.
+     */
+    { 0x0294, 0x0380 },   /* PMIC 0x0528 AUXADC_ADC11: trim sample 896 */
+
+    /*
      * CHR_CON0.PMIC_RGS_CHRDET (wire 0x0000, bit 5) is left *clear*: no cable is
      * connected. It has to be modelled explicitly rather than left to the
      * zeroed register file only in the sense that its value is deliberate.

@@ -321,6 +321,19 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
     s->data_total = 0;
     s->data_len = 0;
     s->data_pos = 0;
+    /*
+     * ACMD51's SCR comes from the model, not from the card image. Serve it
+     * before the image path so a small transfer does not fall through to
+     * "offset 0 of the image", which would return the partition table.
+     */
+    if (s->scr_pending) {
+        s->scr_pending = 0;
+        s->data = s->meta;
+        s->data_total = 8;
+        s->data_len = 8;
+        s->int_status |= MSDC_INT_XFER_COMPL;
+        return;
+    }
     if (s->image && off < s->image_size) {
         total = MIN(total, s->image_size - off);
         s->data = s->image + off;
@@ -426,6 +439,55 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         break;
     case 55:  /* APP_CMD */
         s->sdc_resp[0] = 0x00000920;
+        break;
+    case 51:  /* SEND_SCR, as ACMD51 after CMD55 */
+        /*
+         * LK's mmc_init_card() sends ACMD51 and fails with "Fail in SEND_SCR
+         * cmd" / err=4 if it gets nothing, which leaves g_emmc_size at 0. That
+         * is not cosmetic: mmc_get_dl_info() computes
+         * dl_addr = g_emmc_size - 2048, so a zero size becomes
+         * 0xFFFF_FFFF_FFFF_F800 and the read prefetch-aborts.
+         *
+         * SCR is one 8-byte data block, read like any other data transfer, so
+         * the response is R1 with the data going through the same FIFO path as
+         * CMD17/18. 0x0350_0000 declares SD spec 2.00 support and, in bit 7,
+         * physical-layer 1.0 - which is what makes the driver keep SDHC
+         * addressing. The remaining bits (bus widths, security, data status
+         * after erase) can all read zero.
+         */
+        /*
+         * SCR layout: SCR_STRUCTURE[3:0], SD_SPEC[7:4], DATA_STAT_AFTER_ERASE
+         * [8], SD_SECURITY[14:12], SD_BUS_WIDTHS[19:16], then reserved and the
+         * manufacturer fields. SD_SPEC 2 means spec 2.00 (SDHC capable) and
+         * SD_BUS_WIDTHS 0x5 advertises both 1-bit and 4-bit, which is what makes
+         * the driver keep 4-bit mode instead of dropping to 1-bit.
+         */
+        memset(s->meta, 0, sizeof(s->meta));
+        s->meta[0] = 0x02;   /* SD_SPEC = 2 */
+        s->meta[1] = 0x35;   /* SECURITY = 2, BUS_WIDTHS = 1|4 */
+        s->meta[2] = 0x80;
+        s->meta[3] = 0x00;
+        /*
+         * The R1 response must carry STA_APP_CMD (bit 5) or mmc_read_scrs()
+         * rejects it before ever looking at the data:
+         *     if ((err != MMC_ERR_NONE) || !(cmd.resp[0] & STA_APP_CMD))
+         * which is why the transfer looked implemented and still reported
+         * "Fail in SEND_SCR cmd". CMD55's reply already sets 0x920; this one
+         * needs the bit too because the check is on ACMD51's own response.
+         */
+        s->sdc_resp[0] = 0x00000920;   /* R1 | STA_APP_CMD */
+        s->sdc_blk_sz = 8;
+        s->sdc_blk_num = 1;
+        s->scr_pending = 1;
+        /*
+         * The data phase has to be staged here, exactly as CMD17 does it. The
+         * driver does not re-issue the command to collect the block; it reads the
+         * FIFO after the command completes, so nothing is served unless
+         * fill_fifo ran.
+         */
+        if (has_data && !is_write) {
+            mt6589_msdc_fill_fifo(s);
+        }
         break;
     default:
         s->sdc_resp[0] = 0x00000900;

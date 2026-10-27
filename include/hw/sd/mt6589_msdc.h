@@ -65,6 +65,15 @@ struct Mt6589MsdcState {
     uint32_t data_total;  /* end of the whole staged span */
     uint32_t data_pos;
 
+    /*
+     * Some data phases carry card metadata that is not in the card image at all:
+     * the 8-byte SCR returned by ACMD51, for instance. `data` points at the
+     * image, so those transfers need their own buffer to point into.
+     */
+    uint8_t meta[16];
+    /* Set by ACMD51 so the next FIFO fill serves `meta` instead of the image. */
+    int scr_pending;
+
     /* Backing card image, if one was supplied. */
     uint8_t *image;
     size_t image_size;
