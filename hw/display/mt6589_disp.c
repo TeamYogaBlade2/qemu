@@ -1035,6 +1035,34 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
         if (offset == MUTEX(DISP_MUTEX0_EN) || offset == MUTEX(DISP_MUTEX1_EN)) {
             mt6589_disp_mutex_kick(s);
         }
+
+        /*
+         * Register commit. The driver stages configuration in the display blocks and
+         * then writes CFG_REG_COMMIT, whose bits name the modules to commit (bit 0 ROT,
+         * 1 SCL, 2 OVL, 3 COLOR, 4 TDSHP, 5 WDMA0, 6 WDMA1, 7 RDMA0, 8 RDMA1, 9 BLS,
+         * 10 GAMMA - see the timeout dump in ddp_drv.c). When those modules are updated
+         * the mutex raises "update done" for the mutex that owns them, which is INTSTA
+         * bit n, and that is what the driver's interrupt handler turns into
+         * g_disp_mutex_reg_update.
+         *
+         * Without it nothing ever signals the commit, so disp_path_wait_reg_update()
+         * runs its full 100 ms timeout on every pass and the boot never gets past the
+         * display: measured as PID 1 asleep in that wait with the pipeline being
+         * reconfigured about once a second.
+         */
+        if (offset == MUTEX(DISP_REG_COMMIT) && (uint32_t)value) {
+            for (int n = 0; n < 2; n++) {
+                uint32_t en_reg = (n == 0) ? MUTEX(DISP_MUTEX0_EN)
+                                           : MUTEX(DISP_MUTEX1_EN);
+
+                if (s->regs[en_reg >> 2] & 1u) {
+                    s->regs[MUTEX(DISP_MUTEX_INTSTA) >> 2] |= 1u << n;
+                }
+            }
+            /* The commit is consumed as the modules are updated. */
+            s->regs[offset >> 2] = 0;
+            mt6589_disp_mutex_update_irq(s);
+        }
     }
 
     /* The OVL is the composer: any write may be the one that completes a modeset. */
@@ -1132,8 +1160,23 @@ void mt6589_disp_create(Mt6589State *soc, DeviceState *gic)
         qdev_realize(DEVICE(s), sysbus_get_default(), &error_fatal);
         sysbus_mmio_map(SYS_BUS_DEVICE(s), 0, b->base);
         if (b->has_irq && b->irq_spi && gic) {
+            /*
+             * MT6589_GIC_GPIO, because qdev_get_gpio_in() numbers the GIC's external
+             * inputs by SPI (0-based) while irq_spi is the GIC line the device tree
+             * names, i.e. SPI + 32. Connecting the line number directly put the display
+             * mutex on SPI 192 (line 224) instead of SPI 160 (line 192), so the kernel's
+             * registered handler never ran:
+             *
+             *   ISENABLER6 = 0x000391ff   bit 0 set -> line 192 enabled
+             *   ISPENDR6   = 0x00000000   never pending
+             *
+             * and the guest sat in disp_path_wait_reg_update() waiting for a
+             * register-update event that its own interrupt handler was supposed to
+             * signal - measured as PID 1 asleep there with the display reconfiguring
+             * itself about once a second, each pass spending the full 100 ms timeout.
+             */
             sysbus_connect_irq(SYS_BUS_DEVICE(s), 0,
-                               qdev_get_gpio_in(gic, b->irq_spi));
+                               qdev_get_gpio_in(gic, MT6589_GIC_GPIO(b->irq_spi)));
         }
     }
 }
