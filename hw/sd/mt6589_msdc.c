@@ -96,6 +96,18 @@
 #define MSDC_DMA_CFG         0x009c
 #define MSDC_DMA_CTRL_START  (1u << 0)
 #define MSDC_DMA_CTRL_STOP   (1u << 1)
+/*
+ * MSDC_DMA_CFG bit 0 is STS, a READ-ONLY "the DMA is still active" status
+ * (LK's msdc.h marks it "R").
+ *
+ * msdc_dma_stop() busy-waits on it:
+ *     while ((MSDC_READ32(MSDC_DMA_CFG) & MSDC_DMA_CFG_STS) != 0);
+ *
+ * so if this model stored the guest's write verbatim - including that bit - the
+ * loop could never exit. Every transfer here completes synchronously before the
+ * write returns, so the engine is always idle and STS must always read clear.
+ */
+#define MSDC_DMA_CFG_STS     (1u << 0)
 
 /* MSDC_FIFOCS */
 #define MSDC_FIFOCS_TXCNT     (0xfu << 0)
@@ -720,7 +732,7 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
     case MSDC_DAT_RDDLY1: return s->dat_rddly1;
     case MSDC_DMA_SA:     return s->dma_sa;
     case MSDC_DMA_CTRL:   return s->dma_ctrl;
-    case MSDC_DMA_CFG:    return s->dma_cfg;
+    case MSDC_DMA_CFG:    return s->dma_cfg & ~MSDC_DMA_CFG_STS;
     case EMMC_CFG0:   return s->emmc_cfg0;
     case EMMC_CFG1:   return s->emmc_cfg1;
     case EMMC_STS:
@@ -805,7 +817,8 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         s->dma_sa = value;
         return;
     case MSDC_DMA_CFG:
-        s->dma_cfg = value;
+        /* STS is status, not state: keep it clear so dma_stop's poll exits. */
+        s->dma_cfg = value & ~MSDC_DMA_CFG_STS;
         return;
     case MSDC_DMA_CTRL:
         if (value & MSDC_DMA_CTRL_START) {
