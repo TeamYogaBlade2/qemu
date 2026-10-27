@@ -895,9 +895,32 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
     }
 
     if (mt6589_disp_log_enabled() && (s->frame_count % 200) == 0) {
-        fprintf(stderr, "DISP frame %u: %dx%d first pixel %08" PRIx32
-                " layer-addr %08" PRIx32 "\n", s->frame_count, w, h, dst[0],
-                (uint32_t)s->regs[OVL_L_ADDR(0) >> 2]);
+        /*
+         * Report the layer that actually carries the picture - the last one with an address -
+         * rather than layer 0, which is usually unused and made an earlier trace read as
+         * "the composer sees nothing" when it was seeing plenty. A hash of the composed
+         * pixels says whether there is a picture at all, which the top-left pixel does not
+         * (a centred logo leaves it black).
+         */
+        uint32_t last_addr = 0, last_pitch = 0;
+        uint32_t hash = 0;
+
+        for (int n = 0; n < OVL_NUM_LAYERS; n++) {
+            uint32_t a = s->regs[OVL_L_ADDR(n) >> 2];
+
+            if (a) {
+                last_addr = a;
+                last_pitch = s->regs[OVL_L_PITCH(n) >> 2];
+            }
+        }
+        for (int y = 0; y < h; y += 16) {
+            for (int x = 0; x < w; x += 16) {
+                hash = hash * 31u + dst[(size_t)y * (stride / 4) + x];
+            }
+        }
+        fprintf(stderr, "DISP frame %u: %dx%d src=%08" PRIx32 " pitch=%u "
+                "route=%s hash=%08" PRIx32 "\n", s->frame_count, w, h, last_addr,
+                last_pitch, from_ovl ? "ovl" : "rdma", hash);
     }
     mt6589_disp_dump(s, surface, w, h);
     qemu_console_update(s->con, 0, 0, w, h);
