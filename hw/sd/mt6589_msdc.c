@@ -465,16 +465,22 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         s->sdc_resp[0] = s->sdc_arg & 0xffff0000u;
         break;
     case 8:   /* SEND_IF_COND (SD) / SEND_EXT_CSD (MMC) */
-        fprintf(stderr, "CMD8 arg=%x dt=%u blksz=%u blk=%u\n", s->sdc_arg,
-                (unsigned)((s->sdc_cmd >> 11) & 3), s->sdc_blk_sz, s->sdc_blk_num);
         if (s->sdc_arg == 0) {
             memset(s->meta, 0, sizeof(s->meta));
             s->meta[192] = 7;
             s->meta[183] = 2;
-            s->meta[212] = 80896 & 0xff;
-            s->meta[213] = (80896 >> 8) & 0xff;
-            s->meta[214] = (80896 >> 16) & 0xff;
-            s->meta[215] = (80896 >> 24) & 0xff;
+            /*
+             * SEC_COUNT (offset 212) is what a 4.x eMMC reports its size in, and
+             * it is the only field that can describe more than the 1 GB the
+             * legacy CSD layout tops out at. Keep it in step with the image.
+             */
+            {
+                uint32_t sec = (uint32_t)mt6589_msdc_sectors(s);
+                s->meta[212] = sec & 0xff;
+                s->meta[213] = (sec >> 8) & 0xff;
+                s->meta[214] = (sec >> 16) & 0xff;
+                s->meta[215] = (sec >> 24) & 0xff;
+            }
             s->meta_len = 512;
             s->scr_pending = 1;
             s->sdc_resp[0] = 0x00000900;
@@ -528,7 +534,8 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
              * e is only three bits, so the shift (e + 2) tops out at 9 - the
              * first attempt used e = 8, which overflows the field and decodes as
              * 0. With e = 7 and m = 157 the capacity is 158 << 9 = 80896
-             * sectors, and read_blkbits 9 keeps nblks == capacity.
+             * sectors, and read_blkbits 9 keeps nblks == capacity. The value is
+             * derived from the image so the two cannot drift apart again.
              *
              * CSD bit b lives in resp[3 - b/32] at bit (b % 32): bits 47..49 (e)
              * are resp[2] bits 15..17, bits 62..63 are resp[2] bits 30..31 and
@@ -540,9 +547,31 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
              * driver reads that as CSD bits 48..69, which means driver word 2 is
              * model word 1. Everything below is placed with that reversal.
              */
-            s->sdc_resp[3] = 0xc0000000u;               /* CSD_STRUCT_EXT_CSD */
-            s->sdc_resp[1] = (7u << 15) | ((157u & 0x3u) << 30);   /* e, m low */
-            s->sdc_resp[2] = (9u << 16) | ((157u >> 2) & 0x3ffu);  /* blkbits, m hi */
+            /*
+             * CSD bits 126:125 are CSD_STRUCTURE (3 = EXT_CSD) and bits 125:122
+             * are MMCA_VSN, which must be >= CSD_SPEC_VER_4 or mmc_read_ext_csd()
+             * opts out before issuing the command:
+             *
+             *     if (card->csd.mmca_vsn < CSD_SPEC_VER_4) {
+             *         printf("[SD%d] MMCA_VSN: %d. Skip EXT_CSD\n", ...);
+             *         return MMC_ERR_NONE;
+             *     }
+             *
+             * With MMCA_VSN 0 LK never reads EXT_CSD, so ext_csd[EXT_CSD_REV]
+             * stays 0 and g_emmc_size can never be set. Both fields sit in driver
+             * word 0, i.e. model word 3.
+             */
+            s->sdc_resp[3] = 0xc0000000u | (4u << 26);  /* struct 3, MMCA_VSN 4 */
+            {
+                uint64_t n = mt6589_msdc_sectors(s) >> 9;   /* e = 7 -> shift 9 */
+                unsigned mmc_m = n ? (unsigned)(n - 1) : 0;
+
+                if (mmc_m > 0xfffu) {
+                    mmc_m = 0xfffu;
+                }
+                s->sdc_resp[1] = (7u << 15) | ((mmc_m & 0x3u) << 30);
+                s->sdc_resp[2] = (9u << 16) | ((mmc_m >> 2) & 0x3ffu);
+            }
             s->sdc_resp[0] = 0;
             break;
         }
