@@ -96,7 +96,7 @@ static uint64_t mt6589_gpt_channel_hz(Mt6589State *s, int n)
 }
 
 /* Current counter value, derived from elapsed emulated time. */
-static uint32_t mt6589_gpt_count(Mt6589State *s, int n)
+static uint32_t mt6589_gpt_count_raw(Mt6589State *s, int n)
 {
     int64_t elapsed = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) -
                       s->gpt_chan[n].start_ns;
@@ -106,6 +106,30 @@ static uint32_t mt6589_gpt_count(Mt6589State *s, int n)
         return 0;
     }
     return (uint32_t)((elapsed * hz) / 1000000000ull);
+}
+
+static uint32_t mt6589_gpt_count(Mt6589State *s, int n)
+{
+    /*
+     * A real GPT advances only while CON.EN is set; with the channel disabled the
+     * counter holds whatever it had reached, and CON.CLR drives it back to 0.
+     *
+     * This matters because the kernel starts a channel with a CLR/EN handshake:
+     *
+     *     writel(GPT_CON_CLR, GPT_CON);          @ bit 1
+     *     while (readl(GPT_COUNT))               @ wait for the counter to be 0
+     *         ;
+     *     writel(GPT_CON_EN, GPT_CON);           @ bit 0
+     *
+     * (0xc001b4d8 in the kernel image: `ldr r3,[r2]` / `cmp r3,#0` / `bne`).
+     * Deriving the count from the clock regardless of EN never reads 0 there -
+     * measured counting 0x04d8e20e, 0x06c8d6f2, 0x08b8c7bb, 0x0aa8bca6 on
+     * successive samples - so the boot spun for ever at 0xc001b4dc.
+     */
+    if (!(s->gpt_chan[n].con & MT6589_GPT_CON_EN)) {
+        return s->gpt_chan[n].frozen_count;
+    }
+    return mt6589_gpt_count_raw(s, n);
 }
 
 static void mt6589_gpt_update_irq(Mt6589State *s)
@@ -252,7 +276,12 @@ static void mt6589_gpt_write(void *opaque, hwaddr offset, uint64_t value,
             if (value & MT6589_GPT_CON_CLR) {
                 s->gpt_chan[n].start_ns =
                     qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+                s->gpt_chan[n].frozen_count = 0;
                 s->gpt_irqsta &= ~MT6589_GPT_IRQ_BIT(n);
+            } else if ((s->gpt_chan[n].con & MT6589_GPT_CON_EN) &&
+                       !(value & MT6589_GPT_CON_EN)) {
+                /* Disabling freezes the counter where it stands. */
+                s->gpt_chan[n].frozen_count = mt6589_gpt_count_raw(s, n);
             }
             s->gpt_chan[n].con = value & ~MT6589_GPT_CON_CLR;
             mt6589_gpt_update_irq(s);

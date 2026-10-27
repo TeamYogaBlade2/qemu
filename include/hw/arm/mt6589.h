@@ -314,6 +314,10 @@ struct Mt6589State {
          * so the count is derived rather than accumulated - that is what makes
          * it survive a guest that never reads the register. */
         int64_t start_ns;
+        /* Value the counter holds while the channel is disabled. A real GPT
+         * only counts when CON.EN is set, so a disabled channel reads back what
+         * it had reached - or 0 after CON.CLR. */
+        uint32_t frozen_count;
     } gpt_chan[MT6589_GPT_NUM_CHANNELS];
 
     SerialMM *uart[MT6589_NUM_UARTS];
