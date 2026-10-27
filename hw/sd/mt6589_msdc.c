@@ -264,36 +264,93 @@ static void mt6589_msdc_update_irq(Mt6589MsdcState *s)
  */
 static void mt6589_msdc_dma_run(Mt6589MsdcState *s)
 {
-    uint8_t desc[16];
+    uint8_t desc[32];
     uint32_t gpd = s->dma_sa;
-    uint32_t ptr, buflen;
+    uint32_t written = 0;
 
-    if (!gpd || !s->data || s->data_pos >= s->data_total) {
+    if (!gpd) {
         return;
     }
 
-    if (dma_memory_read(&address_space_memory, gpd, desc, sizeof(desc),
-                        MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
-        return;
-    }
-    ptr = (uint32_t)ldl_le_p(desc + 8);
-    buflen = (uint32_t)lduw_le_p(desc + 12) & 0xffff;
-    if (!ptr || !buflen) {
-        return;
+    /*
+     * Walk the guest's descriptor chain, which is GPD -> BD list -> data.
+     *
+     * The shape is from LK's gpd_t and bd_t (include/platform/msdc.h) and was
+     * confirmed against mi/msdc_dma_config() in the LK binary:
+     *
+     *   gpd_t:  u32 flags;  void *next;  void *ptr;  buflen:16; ...
+     *   bd_t:   u32 flags;  void *next;  void *ptr;  buflen:16;
+     *
+     * flags bit 1 is BDP: "the pointer is a buffer-descriptor list, not data".
+     * LK always sets it (observed flags = 0x3, i.e. HWO | BDP) and then leaves
+     * the GPD's own buflen at zero - it fills bd_t entries instead:
+     *
+     *   81e08026  strh r1,[r3,#0xc]     ; bd.buflen
+     *   81e08028  str  r0,[r3,#0x8]     ; bd.ptr
+     *
+     * Reading only the GPD therefore finds len = 0 and reports no data at all.
+     * That is what left the second mmc_legacy_init() waiting for XFER_COMPL that
+     * nothing could ever raise.
+     */
+    for (int hops = 0; gpd && hops < 64; hops++) {
+        if (dma_memory_read(&address_space_memory, gpd, desc, sizeof(desc),
+                            MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
+            break;
+        }
+        uint32_t flags = ldl_le_p(desc);
+        uint32_t next = ldl_le_p(desc + 4);
+        uint32_t ptr = ldl_le_p(desc + 8);
+        uint32_t buflen = lduw_le_p(desc + 12);
+
+        if (flags & (1u << 1)) {          /* BDP: ptr is a BD list */
+            for (int bd = 0; ptr && bd < 512; bd++) {
+                uint8_t b[16];
+                if (dma_memory_read(&address_space_memory, ptr, b, sizeof(b),
+                                    MEMTXATTRS_UNSPECIFIED) != MEMTX_OK) {
+                    break;
+                }
+                uint32_t bflags = ldl_le_p(b);
+                uint32_t bnext = ldl_le_p(b + 4);
+                uint32_t bptr = ldl_le_p(b + 8);
+                uint32_t blen = lduw_le_p(b + 12);
+                if (bptr && blen && s->data &&
+                        s->data_pos < s->data_total) {
+                    uint32_t avail = s->data_total - s->data_pos;
+                    uint32_t n = MIN(blen, avail);
+                    dma_memory_write(&address_space_memory, bptr,
+                                     s->data + s->data_pos, n,
+                                     MEMTXATTRS_UNSPECIFIED);
+                    s->data_pos += n;
+                    written += n;
+                }
+                if (bflags & 1u) {        /* EOL */
+                    break;
+                }
+                ptr = bnext;
+            }
+        } else if (ptr && buflen && s->data &&
+                   s->data_pos < s->data_total) {
+            uint32_t avail = s->data_total - s->data_pos;
+            uint32_t n = MIN(buflen, avail);
+            dma_memory_write(&address_space_memory, ptr, s->data + s->data_pos,
+                             n, MEMTXATTRS_UNSPECIFIED);
+            s->data_pos += n;
+            written += n;
+        }
+
+        if (flags & 1u) {                 /* EOL */
+            break;
+        }
+        gpd = next;
     }
 
-    uint32_t avail = s->data_total - s->data_pos;
-    uint32_t n = MIN(buflen, avail);
-    dma_memory_write(&address_space_memory, ptr, s->data + s->data_pos, n,
-                     MEMTXATTRS_UNSPECIFIED);
-    s->data_pos += n;
-    s->data_len = s->data_pos;
-
-    /* Consumed: the FIFO must not keep offering it. */
     s->data = NULL;
     s->data_total = 0;
     s->data_len = 0;
     s->data_pos = 0;
+
+    qemu_log_mask(LOG_UNIMP, "%s: %s DMA wrote %u bytes\n",
+                  __func__, s->name, written);
 
     s->int_status |= MSDC_INT_XFER_COMPL;
     mt6589_msdc_update_irq(s);
@@ -331,7 +388,6 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
         s->data = s->meta;
         s->data_total = 8;
         s->data_len = 8;
-        s->int_status |= MSDC_INT_XFER_COMPL;
         return;
     }
     if (s->image && off < s->image_size) {
@@ -340,7 +396,14 @@ static void mt6589_msdc_fill_fifo(Mt6589MsdcState *s)
         s->data_total = total;
         s->data_len = MIN(total, (uint32_t)MSDC_CHUNK_BYTES);
     }
-    s->int_status |= MSDC_INT_XFER_COMPL;
+    /*
+     * No XFER_COMPL here. Staging the data is not completing the transfer:
+     * completion is reported by the RXDATA drain (PIO) or mt6589_msdc_dma_run()
+     * (DMA) once the last byte has been delivered. Raising it at staging time
+     * set 0x1000 on every command that had a data phase, and LK - which reads
+     * INT once and clears only the bits it saw - never acknowledged a 0x1000
+     * that appeared afterwards, so the level-triggered line stayed asserted.
+     */
 }
 
 static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
@@ -406,6 +469,17 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         s->sdc_resp[1] = (uint32_t)((mt6589_msdc_sectors(s) / 1024 - 1) & 0xffff) << 16;
         s->sdc_resp[2] = (uint32_t)((mt6589_msdc_sectors(s) / 1024 - 1) >> 16) & 0x3f;
         s->sdc_resp[3] = s->sdc_resp[0];
+        /*
+         * SEND_CSD returns a 136-bit (16-byte) register, so the driver treats it
+         * as a transfer with a data phase and waits on the data-complete bits:
+         *
+         *     INTEN 0x0000d000 = XFER_COMPL | DATTMO | DATCRCERR
+         *
+         * CMDRDY (0x100) alone never satisfies that wait, and the run blocks in
+         * msdc_intr_wait() -> event_wait() right after CMD9. Measured: INTEN goes
+         * 0x1ff7b -> 0x0 -> 0xd000 and then nothing fires.
+         */
+        s->int_status |= MSDC_INT_XFER_COMPL;
         break;
     case 13:  /* SEND_STATUS */
         s->sdc_resp[0] = 0x00000900;
@@ -439,6 +513,20 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
         break;
     case 55:  /* APP_CMD */
         s->sdc_resp[0] = 0x00000920;
+        break;
+    case 6:   /* SWITCH, and ACMD6 (SET_BUS_WIDTH) after CMD55 */
+        /*
+         * Both are "accepted, nothing to report": CM6 switches an eMMC's EXT_CSD
+         * mode and ACMD6 sets the SD bus width, and in each case the driver only
+         * checks that the command succeeded. They were reaching the default arm,
+         * which answers R1 but leaves the transfer state alone - and the run then
+         * sat in msdc_intr_wait() with INTEN at 0, i.e. waiting for an interrupt
+         * that could never be delivered.
+         */
+        s->sdc_resp[0] = 0x00000900;
+        break;
+    case 42:  /* ERASE */
+        s->sdc_resp[0] = 0x00000900;
         break;
     case 51:  /* SEND_SCR, as ACMD51 after CMD55 */
         /*
@@ -476,8 +564,14 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
          * needs the bit too because the check is on ACMD51's own response.
          */
         s->sdc_resp[0] = 0x00000920;   /* R1 | STA_APP_CMD */
-        s->sdc_blk_sz = 8;
-        s->sdc_blk_num = 1;
+        /*
+         * Do NOT write sdc_blk_sz here. The driver programs the block length
+         * itself (msdc_set_blklen(host, 8)) and leaving 8 in the register makes
+         * the *next* normal read return 8 bytes instead of a 512-byte block -
+         * which showed up as load_pt_from_fixed_addr's read of block 0x3800
+         * (0x700000 / 512, the PMT) coming back with blksz 8, so the table was
+         * never seen the second time.
+         */
         s->scr_pending = 1;
         /*
          * The data phase has to be staged here, exactly as CMD17 does it. The
@@ -495,11 +589,19 @@ static void mt6589_msdc_complete_command(Mt6589MsdcState *s)
     }
 
     s->int_status |= MSDC_INT_CMDRDY;
-    if (s->sdc_cfg & (1u << 15)) {
-        /* Some transfers end with a data phase; nothing is transferred here but
-         * the completion is still reported so the guest does not wait. */
-        s->int_status |= MSDC_INT_XFER_COMPL;
-    }
+    /*
+     * Do NOT raise XFER_COMPL for every command. It used to be raised whenever
+     * sdc_cfg bit 15 was set, which is a *mode* bit, not "this command had a
+     * data phase" - so a plain CMD55 or CMD9 left 0x1000 asserted as well as
+     * CMDRDY. LK's handler reads INT once and clears only what it saw
+     * (MSDC_WRITE32(MSDC_INT, sts)), so a 0x1000 set afterwards was never
+     * acknowledged and the line stayed up: measured as 654,749
+     * "Taking exception 5 [IRQ]" in one run, and as INT write traces showing
+     * val=0x100 against before=0x1100 - i.e. only the CMDRDY bit being cleared.
+     *
+     * Data-phase completion is raised where the data actually completes:
+     * mt6589_msdc_dma_run() for DMA, and the RXDATA drain for PIO.
+     */
     mt6589_msdc_update_irq(s);
 }
 
@@ -581,8 +683,18 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
          * `blo` never falls through. Reported as bytes here.
          */
         uint32_t bytes = remaining;
-        if (bytes > 0xff) {
-            bytes = 0xff;
+        /*
+         * Cap at the hardware FIFO size (128 bytes), not at the 0xff the field
+         * can hold. LK's drain loop reads MSDC_FIFO_SZ-sized bursts:
+         *
+         *     msdc.h: MSDC_FIFO_SZ 128, MSDC_FIFO_THD 128
+         *
+         * and reports more than that only confuses it into issuing RXDATA reads
+         * for words the model will answer with 0 once the staged span runs out -
+         * the run then spins on 0x1c for ever.
+         */
+        if (bytes > 128) {
+            bytes = 128;
         }
         qemu_log_mask(LOG_UNIMP, "%s: %s FIFOCS read -> rxcnt %u\n",
                       __func__, s->name, bytes);
@@ -634,6 +746,18 @@ static uint64_t mt6589_msdc_read(void *opaque, hwaddr offset, unsigned size)
                     s->data_len = MIN(s->data_total,
                                       s->data_pos + (uint32_t)MSDC_CHUNK_BYTES);
                 }
+                /*
+                 * Raise XFER_COMPL again when the last byte has been handed
+                 * over. The command handler already raised it once, but the
+                 * driver's interrupt handler clears MSDC_INT and then waits for
+                 * the data phase to report completion separately - measured:
+                 * after CMD18 (arg 0x3800, the PMT) INTEN is 0 and the run sits
+                 * in event_wait() for ever.
+                 */
+                if (s->data_pos >= s->data_total) {
+                    s->int_status |= MSDC_INT_XFER_COMPL;
+                    mt6589_msdc_update_irq(s);
+                }
             }
             v |= (uint32_t)b << (8 * i);
         }
@@ -665,39 +789,6 @@ static void mt6589_msdc_write(void *opaque, hwaddr offset, uint64_t value,
         s->ps = (uint32_t)value & (MSDC_PS_CDEN | MSDC_PS_CDDEBOUNCE);
         return;
     case MSDC_INT:
-        /* Write 1 to clear. */
-        s->int_status &= ~((uint32_t)value);
-        mt6589_msdc_update_irq(s);
-        return;
-    case MSDC_PAD_CTL0:
-        s->pad_ctl0 = value;
-        return;
-    case MSDC_PAD_CTL1:
-        s->pad_ctl1 = value;
-        return;
-    case MSDC_PAD_CTL2:
-        s->pad_ctl2 = value;
-        return;
-    case MSDC_PAD_TUNE:
-        s->pad_tune = value;
-        return;
-    case MSDC_DMA_SA:
-        s->dma_sa = value;
-        return;
-    case MSDC_DMA_CFG:
-        s->dma_cfg = value;
-        return;
-    case MSDC_DMA_CTRL:
-        /*
-         * START is a trigger, not a state: it reads back clear once the transfer
-         * has run. STOP only drops the setting.
-         */
-        if (value & MSDC_DMA_CTRL_START) {
-            mt6589_msdc_dma_run(s);
-            s->dma_ctrl = value & ~MSDC_DMA_CTRL_START;
-        } else {
-            s->dma_ctrl = value & ~MSDC_DMA_CTRL_START;
-        }
         return;
     case MSDC_DAT_RDDLY0:
         s->dat_rddly0 = value;

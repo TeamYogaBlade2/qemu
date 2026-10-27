@@ -191,7 +191,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_MSDC_BASE(n)     (0x11230000 + (n) * 0x10000)
 #define MT6589_NUM_MSDC         5
 /* MSDC0's IRQ is 78 and they are consecutive in the GIC's SPI map. */
-#define MT6589_MSDC_IRQ(n)      (78 + (n))
+#define MT6589_MSDC_IRQ(n)      (71 + (n))
 
 #define MT6589_DISP_BASE        0x14000000
 #define MT6589_OVL_BASE         0x14003000
@@ -200,7 +200,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 
 /* UART: standard 16550 offsets, so hw/char/serial.c is used directly. */
 #define MT6589_UART_REG_SHIFT   0
-#define MT6589_UART_IRQ         90
+#define MT6589_UART_IRQ         83
 
 /* GPT */
 #define MT6589_GPT_IRQEN        0x00
@@ -212,7 +212,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GPT_COUNT        0x08
 #define MT6589_GPT_COMPARE      0x0c
 #define MT6589_GPT_NUM_CHANNELS 6
-#define MT6589_GPT_IRQ          113
+#define MT6589_GPT_IRQ          145
 
 /* CON field bits, from the datasheet's GPTn_CON field table. */
 #define MT6589_GPT_CON_EN       (1u << 0)

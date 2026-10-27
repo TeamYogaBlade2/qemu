@@ -467,6 +467,8 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     /* cpu_create needs the concrete model: TYPE_ARM_CPU is abstract and
      * object_initialize_with_type asserts on it. */
     s->cpu = ARM_CPU(cpu_create(ARM_CPU_TYPE_NAME("cortex-a7")));
+    /* CBIRQ: record whether any IRQ ever reaches the CPU */
+    { static int n; (void)n; }
 
     /*
      * GICv2 at the addresses the kernel device tree declares: distributor
@@ -494,9 +496,20 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     sysbus_connect_irq(SYS_BUS_DEVICE(s->gic), 1,
                        qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_FIQ));
 
+    /*
+     * The GPT's interrupt line. It used to be declared and driven by
+     * mt6589_gpt_update_irq() but never assigned from the GIC, so
+     * qemu_set_irq(NULL, ...) was a no-op and the tick never reached the CPU:
+     * LK's scheduler never ran from the timer, and event_wait() could not be
+     * preempted. MT6589_GPT_IRQ_ID is GIC_PRIVATE_SIGNALS(32) + 113 = 145, per
+     * the kernel's mt_irq.h and mainline's timer@10008000 (GIC_SPI 113).
+     */
+    s->gpt_irq = qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ);
+
     for (int i = 0; i < MT6589_NUM_UARTS; i++) {
         hwaddr base = MT6589_UART0_BASE + i * 0x1000;
         qemu_irq irq = qdev_get_gpio_in(s->gic, MT6589_UART_IRQ + i);
+
 
         /*
          * The UART is a plain 16550, but with a 4-byte register stride rather

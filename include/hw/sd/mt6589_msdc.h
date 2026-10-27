@@ -73,6 +73,13 @@ struct Mt6589MsdcState {
     uint8_t meta[16];
     /* Set by ACMD51 so the next FIFO fill serves `meta` instead of the image. */
     int scr_pending;
+    /*
+     * XFER_COMPL has to be raised once per transfer, not once per drained word.
+     * Raising it on every RXDATA read kept the interrupt line asserted after the
+     * guest's write-1-to-clear, which produced an interrupt storm - measured as
+     * 666,244 "Taking exception 5 [IRQ]" in a single run.
+     */
+    int xfer_done_raised;
 
     /* Backing card image, if one was supplied. */
     uint8_t *image;
