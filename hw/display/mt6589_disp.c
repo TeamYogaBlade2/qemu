@@ -811,7 +811,20 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
     if ((s->desc->base == 0x14006000 || s->desc->base == 0x14007000) &&
         offset == 0x0004 &&
         (s->regs[0x0010 >> 2] & 1u || s->regs[0x0040 >> 2])) {
-        return s->regs[offset >> 2] | 0x2u;
+        /*
+         * Bit 1 is frame start and bit 0 is frame done. RDMAWait() polls bit 0 with no
+         * timeout at all:
+         *
+         *     while ((DISP_REG_GET(idx * DISP_INDEX_OFFSET +
+         *                          DISP_REG_RDMA_INT_STATUS) & 0x1) != 0x1) ;
+         *
+         * (ddp_rdma.c), so leaving it clear hangs the display path with no way out.
+         * Reporting both while the engine is programmed is the honest simplification
+         * for a model with no memory bandwidth: a transfer takes no time, and the
+         * driver's clear is a write of zero, which the write-1-to-clear rule ignores -
+         * the same thing hardware does when every frame finishes as fast as it starts.
+         */
+        return s->regs[offset >> 2] | 0x3u;
     }
     return s->regs[offset >> 2];
 }

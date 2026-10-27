@@ -559,6 +559,55 @@ static bool mt6589_gpu_log_enabled(void)
 }
 
 /*
+ * MT6589_LATE_LOG=<seconds> traces peripheral accesses after that point of guest time,
+ * once per distinct (offset, pc) pair.
+ *
+ * This exists because "the boot stops here" does not say where the kernel is waiting,
+ * and a task asleep in an interruptible wait is invisible to the hung-task detector: it
+ * never prints, and its stack cannot be reached without knowing the task_struct layout.
+ * What such a loop does do is wake on a timer and touch the same register every time, so
+ * tracing only the accesses after the boot goes quiet shows the wait directly - offset,
+ * and the guest PC, which maps to the function.
+ */
+static bool mt6589_late_log(hwaddr phys, uint32_t *pc_out)
+{
+    static int64_t threshold_ns = -2;
+    /*
+     * Sized generously: with 512 entries this filled up during a busy boot and then
+     * logged every access again, which looks like "the guest is very active" when it
+     * only means the dedup table overflowed.
+     */
+    static uint32_t seen_off[8192];
+    static uint32_t seen_pc[8192];
+    static unsigned nseen;
+    const char *env = getenv("MT6589_LATE_LOG");
+    uint32_t pc;
+
+    if (!env) {
+        return false;
+    }
+    if (threshold_ns == -2) {
+        threshold_ns = (int64_t)(g_ascii_strtod(env, NULL) * 1e9);
+    }
+    if (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) < threshold_ns) {
+        return false;
+    }
+    pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
+    *pc_out = pc;
+    for (unsigned i = 0; i < nseen; i++) {
+        if (seen_off[i] == (uint32_t)phys && seen_pc[i] == pc) {
+            return false;
+        }
+    }
+    if (nseen < ARRAY_SIZE(seen_off)) {
+        seen_off[nseen] = (uint32_t)phys;
+        seen_pc[nseen] = pc;
+        nseen++;
+    }
+    return true;
+}
+
+/*
  * The peripheral region is split in two so the preloader's SRAM at 0x1200_0000 is not
  * covered, and the high half therefore starts at 0x1220_0000 rather than 0x1200_0000.
  * Both halves shared one set of handlers, which made every offset ambiguous: an access
@@ -599,6 +648,15 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 
         fprintf(stderr, "GPU R %05" HWADDR_PRIx " pc=%08" PRIx32 "\n",
                 offset - MT6589_GPU_WINDOW, pc);
+    }
+
+    {
+        uint32_t pc = 0;
+
+        if (mt6589_late_log(0x10000000 + offset, &pc)) {
+            fprintf(stderr, "LATE R phys=%08" HWADDR_PRIx " pc=%08" PRIx32 "\n",
+                    0x10000000 + offset, pc);
+        }
     }
 
     /*
@@ -790,6 +848,16 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
         offset >= MT6589_GPU_WINDOW && offset < MT6589_GPU_WINDOW + MT6589_GPU_SIZE) {
         fprintf(stderr, "GPU W %05" HWADDR_PRIx " = %08" PRIx32 "\n",
                 offset - MT6589_GPU_WINDOW, (uint32_t)value);
+    }
+
+    {
+        uint32_t pc = 0;
+
+        if (mt6589_late_log(0x10000000 + offset, &pc)) {
+            fprintf(stderr, "LATE W phys=%08" HWADDR_PRIx " = %08" PRIx32
+                    " pc=%08" PRIx32 "\n", 0x10000000 + offset,
+                    (uint32_t)value, pc);
+        }
     }
 
     /* SPM MTCMOS power-control registers - see mt6589_peri_read(). */
