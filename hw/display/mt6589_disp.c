@@ -896,6 +896,20 @@ static void mt6589_disp_mutex_vsync(void *opaque)
 static void mt6589_disp_mutex_kick(Mt6589DispBlockState *s)
 {
     bool enabled = (s->regs[0x0020 >> 2] & 1u) || (s->regs[0x0040 >> 2] & 1u);
+    static int no_vsync = -1;
+
+    /*
+     * MT6589_DISP_NOVSYNC=1 switches the per-frame event off, purely so its effect can
+     * be measured: a periodic interrupt that the guest handles by re-running its display
+     * configuration would look like a live guest making no progress, and the only way to
+     * tell that from a guest waiting for a frame is to run both ways.
+     */
+    if (no_vsync < 0) {
+        no_vsync = getenv("MT6589_DISP_NOVSYNC") != NULL;
+    }
+    if (no_vsync) {
+        return;
+    }
 
     if (!s->desc->has_irq) {
         return;

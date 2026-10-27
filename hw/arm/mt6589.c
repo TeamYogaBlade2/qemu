@@ -569,7 +569,7 @@ static bool mt6589_gpu_log_enabled(void)
  * tracing only the accesses after the boot goes quiet shows the wait directly - offset,
  * and the guest PC, which maps to the function.
  */
-static bool mt6589_late_log(hwaddr phys, uint32_t *pc_out)
+static bool mt6589_late_log(hwaddr phys, uint32_t *pc_out, uint32_t *lr_out)
 {
     static int64_t threshold_ns = -2;
     /*
@@ -594,6 +594,12 @@ static bool mt6589_late_log(hwaddr phys, uint32_t *pc_out)
     }
     pc = current_cpu ? cpu_env(current_cpu)->regs[15] : 0;
     *pc_out = pc;
+    /*
+     * The return address is what identifies the CALLER, and the caller is the thing
+     * worth knowing: the PC says which register-access helper ran, the LR says which
+     * driver function is driving the sequence and therefore where the wait lives.
+     */
+    *lr_out = current_cpu ? cpu_env(current_cpu)->regs[14] : 0;
     for (unsigned i = 0; i < nseen; i++) {
         if (seen_off[i] == (uint32_t)phys && seen_pc[i] == pc) {
             return false;
@@ -651,11 +657,11 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
     }
 
     {
-        uint32_t pc = 0;
+        uint32_t pc = 0, lr = 0;
 
-        if (mt6589_late_log(0x10000000 + offset, &pc)) {
-            fprintf(stderr, "LATE R phys=%08" HWADDR_PRIx " pc=%08" PRIx32 "\n",
-                    0x10000000 + offset, pc);
+        if (mt6589_late_log(0x10000000 + offset, &pc, &lr)) {
+            fprintf(stderr, "LATE R phys=%08" HWADDR_PRIx " pc=%08" PRIx32
+                    " lr=%08" PRIx32 "\n", 0x10000000 + offset, pc, lr);
         }
     }
 
@@ -851,12 +857,12 @@ static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
     }
 
     {
-        uint32_t pc = 0;
+        uint32_t pc = 0, lr = 0;
 
-        if (mt6589_late_log(0x10000000 + offset, &pc)) {
+        if (mt6589_late_log(0x10000000 + offset, &pc, &lr)) {
             fprintf(stderr, "LATE W phys=%08" HWADDR_PRIx " = %08" PRIx32
-                    " pc=%08" PRIx32 "\n", 0x10000000 + offset,
-                    (uint32_t)value, pc);
+                    " pc=%08" PRIx32 " lr=%08" PRIx32 "\n",
+                    0x10000000 + offset, (uint32_t)value, pc, lr);
         }
     }
 
