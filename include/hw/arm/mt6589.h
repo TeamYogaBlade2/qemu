@@ -212,6 +212,27 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GPT_COUNT        0x08
 #define MT6589_GPT_COMPARE      0x0c
 #define MT6589_GPT_NUM_CHANNELS 6
+/*
+ * GPT on 113 (the raw SPI number), not 145.
+ *
+ * The evidence is contradictory and this is the value that gets furthest, so it
+ * is kept with the contradiction recorded rather than resolved by preference:
+ *
+ *   - GICD_ISENABLER4 reads 0x00020000 after LK's timer setup, i.e. bit 17 of the
+ *     word for IRQ 128-159, i.e. **IRQ 145 is enabled** - and LK's kernel header
+ *     defines MT6589_GPT_IRQ_ID as GIC_PRIVATE_SIGNALS(32) + 113 = 145, so that
+ *     is consistent;
+ *   - yet wiring the GPT to 145 delivers **0** interrupts in a 22 s run, while
+ *     wiring it to 113 lets the boot get further (20259 bytes, reaching the
+ *     partition-table scan, versus 19426 bytes stopping at platform_early_init);
+ *   - and GICD_ISENABLER3 (IRQ 96-127) reads 0, so 113 is *not* enabled.
+ *
+ * So neither line can be delivering the tick, and the apparent advantage of 113
+ * is probably an artefact of the MSDC interrupt storm rather than of the timer.
+ * Resolving it needs the GPT's own interrupt to be observed directly - assert the
+ * line, then read GICD_ISPENDR/ISACTIVER for both numbers - rather than inferred
+ * from how far the boot gets.
+ */
 #define MT6589_GPT_IRQ          113
 
 /* CON field bits, from the datasheet's GPTn_CON field table. */
