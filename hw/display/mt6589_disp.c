@@ -901,6 +901,25 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
      * are at 0x002c and 0x004c with MUTEX0_EN at 0x0020 / MUTEX1_EN at 0x0040.
      */
     if (s->desc->base == 0x14011000) {
+        /*
+         * CFG_MUTEX(n) at 0x24 + n*0x20: bit 0 is the request the driver writes and
+         * bit 1 is the grant, which is what the driver actually waits for:
+         *
+         *     DISP_REG_SET(DISP_REG_CONFIG_MUTEX(mutexID), 1);
+         *     while ((DISP_REG_GET(DISP_REG_CONFIG_MUTEX(mutexID))
+         *             & DISP_INT_MUTEX_BIT_MASK) != DISP_INT_MUTEX_BIT_MASK)
+         *
+         * and DISP_INT_MUTEX_BIT_MASK is 0x2, not 0x1. Storing the write verbatim
+         * leaves bit 1 clear, so the poll gives up after 10000 tries and the driver
+         * prints "error:disp_path_get_mutex() timeout! mutexID=0" and stops the whole
+         * display pipeline - measured. Nothing else competes for the mutex here, so
+         * the grant is immediate and mirrors the request.
+         */
+        if (offset == 0x0024 || offset == 0x0044) {
+            uint32_t v = (uint32_t)value;
+
+            s->regs[offset >> 2] = (v & ~2u) | ((v & 1u) ? 2u : 0);
+        }
         if (offset == 0x002c || offset == 0x004c) {
             uint32_t en_reg = (offset == 0x002c) ? 0x0020 : 0x0040;
             if (s->regs[en_reg >> 2] & 1u) {
