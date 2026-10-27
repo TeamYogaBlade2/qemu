@@ -454,6 +454,26 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
     if (r->flags & MREG_IDLE) {
         return r->reset;
     }
+    /*
+     * RDMA frame start.
+     *
+     * LK's DSI_WaitVsync() is a poll, not an interrupt wait:
+     *
+     *     MASKREG32(0x14006004, 0x2, 0x0);
+     *     while ((INREG32(0x14006004) & 0x2) != 0x2) { ...timeout... }
+     *
+     * i.e. it clears bit 1 of RDMA INT_STATUS and waits for the hardware to set
+     * it again. A write-1-to-clear latch can never satisfy that, because the
+     * driver clears by writing zero. Report the bit as set while the engine is
+     * programmed - a running read DMA raises frame-start every frame, which is
+     * the behaviour the wait is modelling - and let the write path still latch
+     * it for drivers that do use the interrupt.
+     */
+    if ((s->desc->base == 0x14006000 || s->desc->base == 0x14007000) &&
+        offset == 0x0004 &&
+        (s->regs[0x0010 >> 2] & 1u || s->regs[0x0040 >> 2])) {
+        return s->regs[offset >> 2] | 0x2u;
+    }
     return s->regs[offset >> 2];
 }
 

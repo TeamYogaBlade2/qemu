@@ -145,6 +145,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  * which lets the interface complete while making a wrong result visible.
  */
 #define MT6589_SEJ_BASE         0x1000A000
+#define MT6589_CHIPID_BASE      0x08000000
 #define MT6589_SEJ_STATUS       0x0008
 #define MT6589_SEJ_STATUS_START (1u << 0)
 #define MT6589_SEJ_STATUS_DONE  (1u << 15)
@@ -337,6 +338,7 @@ struct Mt6589State {
     /* SEJ. Interface read off the boot ROM (see the constants above); the
      * transform is not known, so a block is passed through and logged. */
     MemoryRegion sej_iomem;
+    MemoryRegion chipid_iomem;
     uint32_t sej_status;
     uint32_t sej_data[0x3c];
     MemoryRegion peri_iomem;

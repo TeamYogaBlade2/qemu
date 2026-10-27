@@ -368,6 +368,49 @@ static const MemoryRegionOps mt6589_sej_ops = {
 };
 
 /*
+ * Chip ID block, 0x0800_0000.
+ *
+ * The datasheet's memory map lists a four-word device there (0x0800_0000 -
+ * 0x0800_000C) and table 14-2 gives its contents:
+ *
+ *     0x0800_0000  CHIP_ID   0x8a00_6583  main chip id 0x6583, sub 0x8a00
+ *     0x0800_0004  CHIP_VER  0x0000_ca00  HW ID 0xca00, SW ID 0x0000
+ *
+ * LK reaches it through get_devinfo_with_index(20) - its devinfo address table
+ * holds the twenty EFUSE words at 0x1000_9000.. and then this block - and ATAG
+ * construction reads all twenty-one entries. Without the mapping LK takes a data
+ * abort at 0x81e2e340 (`ldr r0,[r3]` with r3 = 0x08000000) while building
+ * tag_devinfo_data, i.e. after it has already accepted the kernel.
+ */
+static uint64_t mt6589_chipid_read(void *opaque, hwaddr offset, unsigned size)
+{
+    switch (offset) {
+    case 0x00:
+        return 0x8a006583u;
+    case 0x04:
+        return 0x0000ca00u;
+    default:
+        /* 0x0800_0008 and 0x0800_000C are not documented. */
+        return 0;
+    }
+}
+
+static void mt6589_chipid_write(void *opaque, hwaddr offset, uint64_t value,
+                                unsigned size)
+{
+    qemu_log_mask(LOG_UNIMP, "%s: write 0x%" PRIx64 " to offset 0x%"
+                  HWADDR_PRIx "\n", __func__, value, offset);
+}
+
+static const MemoryRegionOps mt6589_chipid_ops = {
+    .read = mt6589_chipid_read,
+    .write = mt6589_chipid_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 4, .max_access_size = 4 },
+    .impl = { .min_access_size = 4, .max_access_size = 4 },
+};
+
+/*
  * Peripheral-region catch-all. The datasheet documents a register for every
  * block in 0x1000_0000..0x14FF_FFFF; modelling behaviour for all of them is the
  * long-term job, but the guest must not see a bus error or a silent 0 for a
@@ -483,6 +526,8 @@ static void mt6589_init(Object *obj)
                            MT6589_BOOTROM_SIZE, &error_fatal);
     memory_region_init_io(&s->sej_iomem, OBJECT(s), &mt6589_sej_ops, s,
                           "mt6589.sej", 0x1000);
+    memory_region_init_io(&s->chipid_iomem, OBJECT(s), &mt6589_chipid_ops, s,
+                          "mt6589.chipid", 0x10);
 }
 
 static void mt6589_realize(DeviceState *dev, Error **errp)
@@ -700,6 +745,9 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * this wins. */
     memory_region_add_subregion(get_system_memory(), MT6589_SEJ_BASE,
                                 &s->sej_iomem);
+    /* Chip ID at 0x0800_0000 - see mt6589_chipid_read(). */
+    memory_region_add_subregion(get_system_memory(), MT6589_CHIPID_BASE,
+                                &s->chipid_iomem);
 
     /*
      * Catch-all for the infrastructure and peripheral windows. The datasheet
