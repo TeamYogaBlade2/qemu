@@ -539,11 +539,11 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * preempted. MT6589_GPT_IRQ_ID is GIC_PRIVATE_SIGNALS(32) + 113 = 145, per
      * the kernel's mt_irq.h and mainline's timer@10008000 (GIC_SPI 113).
      */
-    s->gpt_irq = qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ);
+    s->gpt_irq = qdev_get_gpio_in(s->gic, MT6589_GIC_GPIO(MT6589_GPT_IRQ));
 
     for (int i = 0; i < MT6589_NUM_UARTS; i++) {
         hwaddr base = MT6589_UART0_BASE + i * 0x1000;
-        qemu_irq irq = qdev_get_gpio_in(s->gic, MT6589_UART_IRQ + i);
+        qemu_irq irq = qdev_get_gpio_in(s->gic, MT6589_GIC_GPIO(MT6589_UART_IRQ + i));
 
 
         /*
@@ -583,7 +583,8 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
         qdev_realize(DEVICE(s->msdc[i]), sysbus_get_default(), &error_fatal);
         sysbus_mmio_map(SYS_BUS_DEVICE(s->msdc[i]), 0, MT6589_MSDC_BASE(i));
         sysbus_connect_irq(SYS_BUS_DEVICE(s->msdc[i]), 0,
-                           qdev_get_gpio_in(s->gic, MT6589_MSDC_IRQ(i)));
+                           qdev_get_gpio_in(s->gic,
+                                              MT6589_GIC_GPIO(MT6589_MSDC_IRQ(i))));
     }
 
     /*
@@ -676,7 +677,8 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
 
     sysbus_mmio_map(sbd, 0, MT6589_GPT_BASE);
     sysbus_connect_irq(sbd, 0,
-                       qdev_get_gpio_in(s->gic, MT6589_GPT_IRQ));
+                       qdev_get_gpio_in(s->gic,
+                                          MT6589_GIC_GPIO(MT6589_GPT_IRQ)));
 
     memory_region_add_subregion(get_system_memory(), MT6589_SRAM_BASE,
                                 &s->sram);

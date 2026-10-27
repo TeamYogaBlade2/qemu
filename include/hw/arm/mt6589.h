@@ -242,7 +242,35 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  * 113 is not enabled (GICD_ISENABLER3 == 0) and the apparent progress is the MSDC
  * storm, not the tick.
  */
-#define MT6589_GPT_IRQ          113
+#define MT6589_GPT_IRQ          145
+
+/*
+ * Convert a GIC interrupt number to the index qdev_get_gpio_in() expects.
+ *
+ * This is the single most expensive mistake in this machine file. arm_gic.c is
+ * explicit about it:
+ *
+ *     Meaning of the 'irq' parameter:
+ *       [0..N-1]   : external interrupts
+ *       ...
+ *     The first external input line is internal interrupt 32.
+ *     irq += GIC_INTERNAL;
+ *
+ * so the GPIO index is the **SPI number**, and the GIC adds 32 itself. Passing
+ * the full interrupt number therefore lands 32 lines higher than intended:
+ * MT6589_MSDC_IRQ(0) (71) ended up driving IRQ 103 and MT6589_GPT_IRQ (145)
+ * ended up on 177. Measured directly - with the GPT asserted, GICD_ISPENDR3 read
+ * 0x80 (IRQ 103) and ISPENDR5 read 0x00020000 (IRQ 177), while the lines LK had
+ * actually enabled (71 and 145) never became pending. Everything downstream of an
+ * interrupt - the console, the scheduler tick, the DMA completion that LK blocks
+ * on - then looked like a broken peripheral.
+ *
+ * Renode's platform files use the same convention (`IRQ -> gic@39` for MSDC and
+ * `gic@113` for the GPT, i.e. SPI numbers), which is a useful cross-check: the
+ * two emulators should use the same value here, not differ by 32.
+ */
+#define MT6589_GIC_GPIO(irq)    ((irq) - 32)
+
 
 /* CON field bits, from the datasheet's GPTn_CON field table. */
 #define MT6589_GPT_CON_EN       (1u << 0)
