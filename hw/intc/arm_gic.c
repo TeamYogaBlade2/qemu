@@ -58,7 +58,20 @@ static const uint8_t gic_id_gicv2[] = {
 
 static inline int gic_get_current_cpu(GICState *s)
 {
-    if (!qtest_enabled() && s->num_cpu > 1) {
+    /*
+     * current_cpu is only set while a vCPU is executing. Debug accesses - the
+     * gdbstub and the monitor - reach this device from the main thread with no
+     * CPU context at all, and the num_cpu > 1 path dereferences current_cpu
+     * unconditionally, so a debugger read of GICD_ISENABLERn on a multi-CPU
+     * machine segfaults (measured: gdbstub `m10211100,4` -> SIGSEGV at
+     * gic_get_current_cpu, current_cpu == NULL). Single-CPU machines never hit
+     * it, which is why this only appeared once the MT6589 machine became
+     * quad-core.
+     *
+     * Answering as CPU 0 is the same thing the single-CPU path does and is what
+     * a debug read of a per-CPU view of the distributor should report.
+     */
+    if (!qtest_enabled() && s->num_cpu > 1 && current_cpu) {
         return current_cpu->cpu_index - s->first_cpu_index;
     }
     return 0;
