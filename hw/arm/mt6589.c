@@ -196,10 +196,17 @@ static void mt6589_gpt_tick(void *opaque)
             s->gpt_chan[n].con &= ~MT6589_GPT_CON_EN;
             break;
         case MT6589_GPT_MODE_REPEAT:
-            /* Reload: the next period starts now, and the status bit is
-             * cleared so the interrupt can be delivered again. */
+            /*
+             * Reload the counter for the next period, but leave the status bit
+             * set: the guest acknowledges it by writing GPT_IRQACK, and clearing
+             * it here means the interrupt can be missed entirely.
+             *
+             * This is the clock event's mode - mt_gpt.c setup_clkevt() calls
+             * setup_gpt_dev_locked(dev, GPT_REPEAT, ...) - so clearing it made
+             * every tick vanish and left the kernel stuck in calibrate_delay()
+             * waiting for jiffies that could never advance.
+             */
             s->gpt_chan[n].start_ns = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
-            s->gpt_irqsta &= ~MT6589_GPT_IRQ_BIT(n);
             break;
         default:
             /* KEEP-GO and FREERUN keep counting past the compare value. */
@@ -279,6 +286,24 @@ static void mt6589_gpt_write(void *opaque, hwaddr offset, uint64_t value,
                     qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
                 s->gpt_chan[n].frozen_count = 0;
                 s->gpt_irqsta &= ~MT6589_GPT_IRQ_BIT(n);
+            } else if ((value & MT6589_GPT_CON_EN) &&
+                       !(s->gpt_chan[n].con & MT6589_GPT_CON_EN)) {
+                /*
+                 * Enabling restarts the counter from the value it froze at, not
+                 * from wherever start_ns happens to point. Without this, a channel
+                 * that was disabled long ago resumes with a count far past its
+                 * compare and matches immediately: measured, GPT1 produced its
+                 * status bit the instant the kernel armed it, before the driver
+                 * could be ready, and then sat unacknowledged for ever.
+                 */
+                uint64_t hz = mt6589_gpt_channel_hz(s, n);
+
+                if (hz) {
+                    s->gpt_chan[n].start_ns =
+                        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) -
+                        (int64_t)(((uint64_t)s->gpt_chan[n].frozen_count *
+                                   1000000000ull) / hz);
+                }
             } else if (!(value & MT6589_GPT_CON_EN)) {
                 /*
                  * Stopping a channel also drops its request. GPT_IRQSTA is sticky
