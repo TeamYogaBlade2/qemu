@@ -38,6 +38,8 @@
 #include "hw/arm/mt6589.h"
 #include "hw/core/boards.h"
 #include "hw/core/irq.h"
+#include "hw/arm/bsa.h"
+#include "target/arm/gtimer.h"
 #include "target/arm/arm-powerctl.h"
 #include "hw/core/qdev-properties.h"
 #include "system/address-spaces.h"
@@ -548,6 +550,30 @@ static const MemoryRegionOps mt6589_chipid_ops = {
 static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 {
     /*
+     * Poll detector. A driver that waits for a status bit this model never sets
+     * spins on one address for ever, and the guest simply goes idle with no
+     * output - which is exactly how the boot stopped after kthreadd's fork. Track
+     * consecutive reads of the same offset and say so once it looks like a poll,
+     * so the missing register names itself instead of having to be bisected.
+     */
+    {
+        static hwaddr last;
+        static unsigned long long streak;
+        static int reported;
+
+        if (offset == last) {
+            if (++streak == 200000 && !reported) {
+                fprintf(stderr, "PERI poll: offset %05" HWADDR_PRIx
+                        " read %llu times in a row (catch-all returns 0)\n",
+                        offset, streak);
+                reported++;
+            }
+        } else {
+            last = offset;
+            streak = 1;
+        }
+    }
+    /*
      * Keypad scan results. KP_MEM1..5 sit inside this window because the region
      * is the whole peripheral range and KPD has no model of its own; the read is
      * intercepted here rather than left to the catch-all so the value is right.
@@ -699,7 +725,7 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      *
      * The old 224 was fine only because nothing above SPI 159 was wired.
      */
-    qdev_prop_set_uint32(s->gic, "num-irq", 256);
+    qdev_prop_set_uint32(s->gic, "num-irq", MT6589_GIC_NUM_IRQ);
     qdev_prop_set_uint32(s->gic, "revision", 2);
     /*
      * The real GIC has the security extensions and the kernel programs its
@@ -725,6 +751,36 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * takes line i for its IRQ and line ncpu + i for its FIQ.
      */
     for (int i = 0; i < ncpu; i++) {
+        /*
+         * The CPU's architected-timer outputs have to be wired to the GIC's PPI
+         * lines; qdev_init_gpio_out() only creates the CPU-side lines, and an
+         * unconnected line means the generic timer never raises an interrupt.
+         *
+         * That is not hypothetical: once interrupts started working the kernel
+         * moved its tick off the GPT and onto this timer - measured,
+         * GICD_ISENABLER0 gained PPI 29 while GPT_IRQEN bit 0 was cleared - and
+         * with nothing connected, jiffies froze at 0x36 and the boot stopped
+         * idle in cpu_v7_do_idle with the initcalls half done.
+         *
+         * The line numbering matters. arm_gic's gic_set_irq() takes
+         * [0 .. N-1] as external interrupts and then N + cpu*32 + irq as the PPIs
+         * of each CPU, with N = num_irq - GIC_INTERNAL. Passing the bare PPI
+         * number therefore wires nothing useful - it lands on an SPI - which is
+         * why simply connecting GTIMER_SEC to line 29 changed nothing at all.
+         */
+        static const int gt_ppi[] = {
+            [GTIMER_PHYS] = ARCH_TIMER_NS_EL1_IRQ,   /* 30 */
+            [GTIMER_VIRT] = ARCH_TIMER_VIRT_IRQ,     /* 27 */
+            [GTIMER_HYP]  = ARCH_TIMER_NS_EL2_IRQ,   /* 26 */
+            [GTIMER_SEC]  = ARCH_TIMER_S_EL1_IRQ,    /* 29 */
+        };
+        int ppibase = (MT6589_GIC_NUM_IRQ - 32) + i * 32;
+
+        for (int j = 0; j < ARRAY_SIZE(gt_ppi); j++) {
+            qdev_connect_gpio_out(DEVICE(s->cpu[i]), j,
+                                  qdev_get_gpio_in(s->gic, ppibase + gt_ppi[j]));
+        }
+
         sysbus_connect_irq(SYS_BUS_DEVICE(s->gic), i,
                            qdev_get_gpio_in(DEVICE(s->cpu[i]), ARM_CPU_IRQ));
         sysbus_connect_irq(SYS_BUS_DEVICE(s->gic), ncpu + i,
