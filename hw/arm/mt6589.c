@@ -701,6 +701,20 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      */
     qdev_prop_set_uint32(s->gic, "num-irq", 256);
     qdev_prop_set_uint32(s->gic, "revision", 2);
+    /*
+     * The real GIC has the security extensions and the kernel programs its
+     * interrupts into group 1 - GICD_IGROUPR for IRQ 145 reads 0xff - because it
+     * expects to run non-secure after TrustZone boots it. This machine boots
+     * everything in secure state, so QEMU classifies every access as secure and
+     * gic_get_current_pending_irq() then answers 1022 for a group-1 interrupt with
+     * AckCtl clear (GICC_CTLR = 0x1b), i.e. the interrupt is never dispatched.
+     *
+     * Turning the extensions on here does not fix that on its own (measured:
+     * HPPIR still 0x3fe) - what is missing is the CPU's non-secure handover, the
+     * SCR_EL3.NS switch that LK performs before entering Linux. See
+     * docs/qemu/lk-irq-and-dma.md.
+     */
+    qdev_prop_set_bit(s->gic, "has-security-extensions", false);
     qdev_realize(s->gic, sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gic), 0, MT6589_GIC_DIST_BASE);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gic), 1, MT6589_GIC_CPU_BASE);
