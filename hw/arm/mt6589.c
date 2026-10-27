@@ -56,6 +56,32 @@
  * Renode's port got this wrong first (it advanced only on access) and the guest
  * stalled; this is the QEMU equivalent done up front rather than rediscovered.
  */
+/*
+ * SYS is 13 MHz, RTC is 32768 Hz.
+ *
+ * There is a known disagreement between these rates and what LK assumes for its
+ * own tick, and it is left visible rather than papered over:
+ *
+ *   - LK selects the SYS source (mt_gpt.h: GPT_CLK_SYS == 0, and
+ *     platform_set_periodic_timer() writes CON without the RTC bit) but computes
+ *     the compare value as `TIMER_TICK_RATE(32768) * interval / 1000`, i.e. it
+ *     expects the counter to advance at 32768 Hz. At 13 MHz a 10 ms tick expires
+ *     in 25 us, which measures as ~21,000 interrupts/s (426,816 exceptions in a
+ *     20 s run).
+ *   - Setting SYS to 32768 to match LK stops that storm but makes the
+ *     preloader, which uses the same GPT with the same source for its delays,
+ *     about 400x too slow: boot stalls at rtc_first_boot_init after 1.4 KB of
+ *     output instead of reaching LK.
+ *
+ * So neither value is right for both users, which means the model's clock model
+ * is too simple rather than that one number is wrong: the GPT SYS source is
+ * presumably a real 13 MHz clock and LK's 32768 is an error in its own tick
+ * arithmetic (or it expects a divider this model does not apply). Resolving it
+ * needs the real GPT clock tree, which is not established yet.
+ *
+ * 13 MHz is kept because it is the only value under which the whole chain runs;
+ * the storm it causes is real and documented in docs/qemu/lk-irq-and-dma.md.
+ */
 #define MT6589_GPT_SYS_HZ 13000000ull
 #define MT6589_GPT_RTC_HZ 32768ull
 

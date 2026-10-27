@@ -212,7 +212,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GPT_COUNT        0x08
 #define MT6589_GPT_COMPARE      0x0c
 #define MT6589_GPT_NUM_CHANNELS 6
-#define MT6589_GPT_IRQ          145
+#define MT6589_GPT_IRQ          113
 
 /* CON field bits, from the datasheet's GPTn_CON field table. */
 #define MT6589_GPT_CON_EN       (1u << 0)
