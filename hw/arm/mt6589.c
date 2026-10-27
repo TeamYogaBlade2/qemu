@@ -38,6 +38,7 @@
 #include "hw/arm/mt6589.h"
 #include "hw/core/boards.h"
 #include "hw/core/irq.h"
+#include "target/arm/arm-powerctl.h"
 #include "hw/core/qdev-properties.h"
 #include "system/address-spaces.h"
 #include "system/memory.h"
@@ -500,6 +501,47 @@ static uint64_t mt6589_peri_read(void *opaque, hwaddr offset, unsigned size)
 static void mt6589_peri_write(void *opaque, hwaddr offset, uint64_t value,
                               unsigned size)
 {
+    Mt6589State *s = opaque;
+
+    /*
+     * MCUSYS slave-CPU release, phys 0x1000_2034 / 0x2038 / 0x203C / 0x2040.
+     *
+     * mediatek/platform/mt6589/kernel/core/mt-smp.c boot_secondary():
+     *
+     *     #define SLAVE_JUMP_REG   0xF0002034   (phys 0x10002034)
+     *     #define SLAVE1_MAGIC_REG 0xF0002038
+     *     #define SLAVE1_MAGIC_NUM 0x534C4131
+     *
+     *     mt65xx_reg_sync_writel(SLAVE1_MAGIC_NUM, SLAVE1_MAGIC_REG);  @ cpu 1
+     *     ... then it waits up to one second for pen_release to clear, and on
+     *     failure does on_each_cpu(dump_stack), which is what fills the log with
+     *     "CPU0: Unknown IPI message 0x0" once per retry.
+     *
+     * The kernel writes the secondary entry point (virt_to_phys of
+     * mt_secondary_startup) to SLAVE_JUMP_REG, so power the matching CPU on
+     * there when its magic appears. Without this the machine reports four CPUs
+     * (the kernel's [CORE] num:4) but only one ever runs.
+     */
+    switch (offset) {
+    case 0x2034:
+        s->mcusys_jump = value;
+        return;
+    case 0x2038:
+    case 0x203c:
+    case 0x2040: {
+        static const uint32_t magic[3] = { 0x534C4131u, 0x4C415332u, 0x41534C33u };
+        int cpu = 1 + (offset - 0x2038) / 4;
+
+        if ((uint32_t)value == magic[cpu - 1]) {
+            arm_set_cpu_on(cpu, s->mcusys_jump, 0, 1, false);
+            return;
+        }
+        break;
+    }
+    default:
+        break;
+    }
+
     qemu_log_mask(LOG_UNIMP, "%s: offset 0x%" HWADDR_PRIx " <- 0x%" PRIx64
                   " size %u\n", __func__, offset, value, size);
 }
@@ -566,7 +608,11 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
 
     /* cpu_create needs the concrete model: TYPE_ARM_CPU is abstract and
      * object_initialize_with_type asserts on it. */
-    s->cpu = ARM_CPU(cpu_create(ARM_CPU_TYPE_NAME("cortex-a7")));
+    unsigned ncpu = MIN((unsigned)current_machine->smp.cpus, MT6589_MAX_CPUS);
+
+    for (int i = 0; i < ncpu; i++) {
+        s->cpu[i] = ARM_CPU(cpu_create(ARM_CPU_TYPE_NAME("cortex-a7")));
+    }
     /* CBIRQ: record whether any IRQ ever reaches the CPU */
     { static int n; (void)n; }
 
@@ -578,7 +624,7 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * qdev_get_gpio_in_named asserts.
      */
     s->gic = qdev_new(TYPE_ARM_GIC);
-    qdev_prop_set_uint32(s->gic, "num-cpu", 1);
+    qdev_prop_set_uint32(s->gic, "num-cpu", ncpu);
         /*
      * The GIC needs at least 204 SPIs: the display blocks sit above 160
      * (mt6589.dtsi puts OVL at GIC_SPI 163), and qdev asserts rather than
@@ -600,10 +646,25 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gic), 1, MT6589_GIC_CPU_BASE);
     /* The GIC's CPU-side lines are sysbus IRQs, not named GPIOs, so they are
      * connected with sysbus_connect_irq rather than qdev_connect_gpio_out. */
-    sysbus_connect_irq(SYS_BUS_DEVICE(s->gic), 0,
-                       qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_IRQ));
-    sysbus_connect_irq(SYS_BUS_DEVICE(s->gic), 1,
-                       qdev_get_gpio_in(DEVICE(s->cpu), ARM_CPU_FIQ));
+    /*
+     * arm_gic exposes num_cpu IRQ lines followed by num_cpu FIQ lines, so CPU i
+     * takes line i for its IRQ and line ncpu + i for its FIQ.
+     */
+    for (int i = 0; i < ncpu; i++) {
+        sysbus_connect_irq(SYS_BUS_DEVICE(s->gic), i,
+                           qdev_get_gpio_in(DEVICE(s->cpu[i]), ARM_CPU_IRQ));
+        sysbus_connect_irq(SYS_BUS_DEVICE(s->gic), ncpu + i,
+                           qdev_get_gpio_in(DEVICE(s->cpu[i]), ARM_CPU_FIQ));
+    }
+
+    /*
+     * MT6589 is a quad-core part and the kernel is built for four ([CORE] num:4),
+     * so the secondaries start powered down and are released by the MCUSYS slave
+     * registers above. arm_set_cpu_on() refuses a CPU that is already on.
+     */
+    for (int i = 1; i < ncpu; i++) {
+        arm_set_cpu_off(i);
+    }
 
     /*
      * The GPT's interrupt line. It used to be declared and driven by
@@ -912,14 +973,15 @@ static void mt6589_machine_init(MachineState *machine)
         .board_id = -1,
         .firmware_loaded = brom != NULL,
     };
-    arm_load_kernel(s->cpu, machine, &boot_info);
+    arm_load_kernel(s->cpu[0], machine, &boot_info);
 }
 
 static void mt6589_machine_class_init(MachineClass *mc)
 {
     mc->desc = "MediaTek MT6589 (Cortex-A7)";
     mc->init = mt6589_machine_init;
-    mc->max_cpus = 1;
+    mc->max_cpus = MT6589_MAX_CPUS;
+    mc->default_cpus = MT6589_MAX_CPUS;
     mc->default_cpu_type = ARM_CPU_TYPE_NAME("cortex-a7");
     mc->default_ram_id = "mt6589.ram";
     mc->default_ram_size = 1024 * MiB;

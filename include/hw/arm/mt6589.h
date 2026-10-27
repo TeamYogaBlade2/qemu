@@ -85,6 +85,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  * configuration, so a model that does not answer produces a wrong board.
  */
 #define MT6589_CHIPID_BASE      0x08000000
+#define MT6589_MAX_CPUS         4
 
 /*
  * Keypad controller. Only the scan-result registers matter to the boot chain:
@@ -297,7 +298,9 @@ struct Mt6589State {
     SysBusDevice parent_obj;
 
     /*< public >*/
-    ARMCPU *cpu;
+    ARMCPU *cpu[MT6589_MAX_CPUS];
+    /* SLAVE_JUMP_REG: where the kernel asks MT6589's secondaries to start. */
+    uint32_t mcusys_jump;
     DeviceState *gic;
 
     /* GPT: one block, six channels, one level IRQ into the GIC. */
