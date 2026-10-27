@@ -21,12 +21,15 @@
  * enabled - and it is better than returning 0, which the guest reads as "block
  * not present" and acts on.
  *
- * TODO, in boot-chain order. Each needs the guest to get further than the
- * previous stage before its behaviour can be measured against anything:
- *   - PWRAP + MT6320 PMIC (CHRDET/PWRKEY decide preloader vs power-off)
- *   - MSDC (card enumeration; INTEN gating matters, see the Renode notes)
- *   - M4U, SMI/LARB (the display pipeline will not bind without them)
- *   - DISP: OVL/RDMA/COLOR/DSI
+ * What that covers today, in boot-chain order: the boot ROM, the preloader (PMIC via
+ * PWRAP, DRAM calibration, eMMC reads), LK (including its display path) and the Linux
+ * kernel to about 2.8 s of guest time, where it waits in the SD/eMMC path. The display
+ * blocks live in hw/display/mt6589_disp.c and are documented in the emulator tree's
+ * docs/qemu/display.md; what is still unimplemented and why is in docs/unknowns.md there.
+ *
+ * Nothing above this line is a TODO list. It was, and the items on it - PWRAP, MSDC, M4U,
+ * the display - have all been measured against a guest since, which is the only thing that
+ * ever makes a comment here true.
  */
 
 #include "qemu/osdep.h"
