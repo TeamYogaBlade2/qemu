@@ -66,9 +66,22 @@
 #include "hw/arm/mt6589-regs/mt6589-disp_ovl-regs.h"
 #include "hw/arm/mt6589-regs/mt6589-disp_rdma-regs.h"
 #include "hw/arm/mt6589-regs/mt6589-disp_mutex-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-disp_wdma-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-disp_bls-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-disp_gamma-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-disp_color-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-dsi-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-dpi-regs.h"
+#include "hw/arm/mt6589-regs/mt6589-dispsys_config-regs.h"
 
 #define RDMA(name)  (MT6589_DISP_RDMA_##name - MT6589_DISP_RDMA_BASE)
 #define MUTEX(name) (MT6589_DISP_MUTEX_##name - MT6589_DISP_MUTEX_BASE)
+#define WDMA(name)  (MT6589_DISP_WDMA_##name - MT6589_DISP_WDMA_BASE)
+#define BLS(name)   (MT6589_DISP_BLS_##name - MT6589_DISP_BLS_BASE)
+#define GAMMA(name) (MT6589_DISP_GAMMA_##name - MT6589_DISP_GAMMA_BASE)
+#define COLOR(name) (MT6589_DISP_COLOR_##name - MT6589_DISP_COLOR_BASE)
+#define DSI(name)   (MT6589_DSI_##name - MT6589_DSI_BASE)
+#define DPI(name)   (MT6589_DPI_##name - MT6589_DPI_BASE)
 
 
 /* ------------------------------------------------------------------------- */
@@ -178,16 +191,27 @@ static const Mt6589DispReg mt6589_rdma_regs[] = {
  * contiguous run, so those offsets must all hold writes.
  */
 static const Mt6589DispReg mt6589_color_regs[] = {
-    { 0x0400, 0, 0 },                   /* DISP_COLOR_CFG_MAIN */
-    { 0x0404, 0, 0 },                   /* DISP_COLOR_START */
-    { 0x0408, 0, MREG_SELFCL },         /* DISP_COLOR_INTEN */
-    { 0x040c, 0, MREG_W1C },            /* DISP_COLOR_INTSTA */
-    { 0x0f64, 0, 0 },                   /* R2Y coefficient 0 */
-    { 0x0f68, 0, 0 },
-    { 0x0f6c, 0, 0 },
-    { 0x0f70, 0, 0 },
-    { 0x0f74, 0, 0 },
-    { 0x0f78, 0, 0 },
+    /*
+     * The counters follow CFG_MAIN, and the block's own START / INTEN / INTSTA are
+     * much further down at 0xf00. The hand-written table had them at 0x404 / 0x408 /
+     * 0x40c - on top of the counters - so the driver's interrupt enable and status
+     * went nowhere, and a counter carried the write-one-to-clear flag. Comparing the
+     * offsets against mt6589-disp_color-regs.h is what exposed it.
+     */
+    { COLOR(CFG_MAIN), 0, 0 },
+    { COLOR(PXL_CNT_MAIN), 0, 0 },
+    { COLOR(LINE_CNT_MAIN), 0, 0 },
+    { COLOR(WIN_X_MAIN), 0, 0 },
+    { COLOR(DISP_COLOR_START), 0, MREG_SELFCL },
+    { COLOR(DISP_COLOR_INTEN), 0, 0 },
+    /* Write-one-to-clear is unverified for this block; nothing wires its line yet. */
+    { COLOR(DISP_COLOR_INTSTA), 0, MREG_W1C },
+    { COLOR(DISP_COLOR_CM1_C00), 0, 0 },                   /* R2Y coefficient 0 */
+    { COLOR(DISP_COLOR_CM1_C01), 0, 0 },
+    { COLOR(DISP_COLOR_CM1_C02), 0, 0 },
+    { COLOR(DISP_COLOR_CM1_C10), 0, 0 },
+    { COLOR(DISP_COLOR_CM1_C11), 0, 0 },
+    { COLOR(DISP_COLOR_CM1_C12), 0, 0 },
 };
 
 /* ------------------------------------------------------------------------- */
@@ -200,7 +224,7 @@ static const Mt6589DispReg mt6589_color_regs[] = {
  */
 static const Mt6589DispReg mt6589_mutex_regs[] = {
     { MUTEX(DISP_MUTEX_INTEN), 0, 0 },
-    { MUTEX(DISP_MUTEX_INTSTA), 0, MREG_W1C },
+    { MUTEX(DISP_MUTEX_INTSTA), 0, MREG_W0C },
     /*
      * Per mutex: EN, MUTEX, RST, MOD, SOF at 0x20/0x24/0x28/0x2c/0x30 and
      * 0x40/0x44/0x48/0x4c/0x50. The previous table put RST at 0x24 and SOF at 0x2c -
@@ -234,54 +258,54 @@ static const Mt6589DispReg mt6589_mutex_regs[] = {
  */
 
 static const Mt6589DispReg mt6589_dsi_regs[] = {
-    { 0x0000, 0x00000000, 0 },  /* DSI_START */
-    { 0x0004, 0x00000000, 0 },  /* DSI_STATUS */
-    { 0x0008, 0x00000000, 0 },  /* DSI_INTEN */
-    { 0x000c, 0x00000000, 0 },  /* DSI_INTSTA */
-    { 0x0010, 0x00000000, 0 },  /* DSI_COM_CON */
-    { 0x0014, 0x00000000, 0 },  /* DSI_MODE_CON */
-    { 0x0018, 0x00000000, 0 },  /* DSI_TXRX_CON */
-    { 0x001c, 0x00000000, 0 },  /* DSI_PSCON */
-    { 0x0020, 0x00000000, 0 },  /* DSI_VSA_NL */
-    { 0x0024, 0x00000000, 0 },  /* DSI_VBP_NL */
-    { 0x0028, 0x00000000, 0 },  /* DSI_VFP_NL */
-    { 0x002c, 0x00000000, 0 },  /* DSI_VACT_NL */
-    { 0x0050, 0x00000000, 0 },  /* DSI_HSA_WC */
-    { 0x0054, 0x00000000, 0 },  /* DSI_HBP_WC */
-    { 0x0058, 0x00000000, 0 },  /* DSI_HFP_WC */
-    { 0x005c, 0x00000000, 0 },  /* DSI_BLLP_WC - the driver writes it; without the
+    { DSI(DSI_START), 0x00000000, 0 },  /* DSI_START */
+    { DSI(DSI_STATUS), 0x00000000, 0 },  /* DSI_STATUS */
+    { DSI(DSI_INTEN), 0x00000000, 0 },  /* DSI_INTEN */
+    { DSI(DSI_INTSTA), 0x00000000, 0 },  /* DSI_INTSTA */
+    { DSI(DSI_COM_CON), 0x00000000, 0 },  /* DSI_COM_CON */
+    { DSI(DSI_MODE_CON), 0x00000000, 0 },  /* DSI_MODE_CON */
+    { DSI(DSI_TXRX_CON), 0x00000000, 0 },  /* DSI_TXRX_CON */
+    { DSI(DSI_PSCON), 0x00000000, 0 },  /* DSI_PSCON */
+    { DSI(DSI_VSA_NL), 0x00000000, 0 },  /* DSI_VSA_NL */
+    { DSI(DSI_VBP_NL), 0x00000000, 0 },  /* DSI_VBP_NL */
+    { DSI(DSI_VFP_NL), 0x00000000, 0 },  /* DSI_VFP_NL */
+    { DSI(DSI_VACT_NL), 0x00000000, 0 },  /* DSI_VACT_NL */
+    { DSI(DSI_HSA_WC), 0x00000000, 0 },  /* DSI_HSA_WC */
+    { DSI(DSI_HBP_WC), 0x00000000, 0 },  /* DSI_HBP_WC */
+    { DSI(DSI_HFP_WC), 0x00000000, 0 },  /* DSI_HFP_WC */
+    { DSI(DSI_BLLP_WC), 0x00000000, 0 },  /* DSI_BLLP_WC - the driver writes it; without the
                                  * entry the value was dropped and read back as 0 */
-    { 0x0060, 0x00000000, 0 },  /* DSI_CMDQ_CON */
-    { 0x0074, 0x00000000, 0 },  /* DSI_RX_DATA03 */
-    { 0x0078, 0x00000000, 0 },  /* DSI_RX_DATA47 */
-    { 0x007c, 0x00000000, 0 },  /* DSI_RX_DATA8B */
-    { 0x0080, 0x00000000, 0 },  /* DSI_RX_DATAC */
-    { 0x0084, 0x00000000, 0 },  /* DSI_RX_RACK */
-    { 0x0088, 0x00000000, 0 },  /* DSI_RX_TRIG_STA */
-    { 0x0090, 0x00000000, 0 },  /* DSI_MEM_CONTI */
-    { 0x0094, 0x00000000, 0 },  /* DSI_FRM_BC */
-    { 0x0104, 0x00000000, 0 },  /* DSI_PHY_LCCON */
-    { 0x0108, 0x00000000, 0 },  /* DSI_PHY_LD0CON */
-    { 0x0110, 0x00005050, 0 },  /* DSI_PHY_TIMCON0 */
-    { 0x0114, 0x00004c68, 0 },  /* DSI_PHY_TIMCON1 */
-    { 0x0118, 0x00000000, 0 },  /* DSI_PHY_TIMCON2 */
-    { 0x011c, 0x00005070, 0 },  /* DSI_PHY_TIMCON3 */
-    { 0x0130, 0x00000000, 0 },  /* DSI_VM_CMD_ */
-    { 0x0144, 0x0000ffff, 0 },  /* DSI_CKSM_OUT */
-    { 0x0148, 0x00001008, 0 },  /* DSI_STATE_DBG0 */
-    { 0x014c, 0x00004000, 0 },  /* DSI_STATE_DBG1 */
-    { 0x0150, 0x00000200, 0 },  /* DSI_STATE_DBG2 */
-    { 0x0154, 0x00000210, 0 },  /* DSI_STATE_DBG3 */
-    { 0x0158, 0x00000210, 0 },  /* DSI_STATE_DBG4 */
-    { 0x0160, 0x00002000, 0 },  /* DSI_STATE_DBG6 */
-    { 0x0164, 0x00000000, 0 },  /* DSI_STATE_DBG7 */
-    { 0x0168, 0x00000000, 0 },  /* DSI_STATE_DBG8 */
-    { 0x016c, 0x00000000, 0 },  /* DSI_STATE_DBG9 */
-    { 0x0170, 0x00000000, 0 },  /* DSI_DEBUG_SEL */
-    { 0x0174, 0x00000000, 0 },  /* DSI_RESERVED */
-    { 0x0178, 0x00000000, 0 },  /* DSI_BIST_PATTERN */
-    { 0x017c, 0x00000000, 0 },  /* DSI_BIST_CON */
-    { 0x0180, 0x00000000, 0 },  /* DSI_CMDQ0 */
+    { DSI(DSI_CMDQ_CON), 0x00000000, 0 },  /* DSI_CMDQ_CON */
+    { DSI(DSI_RX_DATA03), 0x00000000, 0 },  /* DSI_RX_DATA03 */
+    { DSI(DSI_RX_DATA47), 0x00000000, 0 },  /* DSI_RX_DATA47 */
+    { DSI(DSI_RX_DATA8B), 0x00000000, 0 },  /* DSI_RX_DATA8B */
+    { DSI(DSI_RX_DATAC), 0x00000000, 0 },  /* DSI_RX_DATAC */
+    { DSI(DSI_RX_RACK), 0x00000000, 0 },  /* DSI_RX_RACK */
+    { DSI(DSI_RX_TRIG_STA), 0x00000000, 0 },  /* DSI_RX_TRIG_STA */
+    { DSI(DSI_MEM_CONTI), 0x00000000, 0 },  /* DSI_MEM_CONTI */
+    { DSI(DSI_FRM_BC), 0x00000000, 0 },  /* DSI_FRM_BC */
+    { DSI(DSI_PHY_LCCON), 0x00000000, 0 },  /* DSI_PHY_LCCON */
+    { DSI(DSI_PHY_LD0CON), 0x00000000, 0 },  /* DSI_PHY_LD0CON */
+    { DSI(DSI_PHY_TIMCON0), 0x00005050, 0 },  /* DSI_PHY_TIMCON0 */
+    { DSI(DSI_PHY_TIMCON1), 0x00004c68, 0 },  /* DSI_PHY_TIMCON1 */
+    { DSI(DSI_PHY_TIMCON2), 0x00000000, 0 },  /* DSI_PHY_TIMCON2 */
+    { DSI(DSI_PHY_TIMCON3), 0x00005070, 0 },  /* DSI_PHY_TIMCON3 */
+    { DSI(DSI_VM_CMD_CON), 0x00000000, 0 },  /* DSI_VM_CMD_ */
+    { DSI(DSI_CKSM_OUT), 0x0000ffff, 0 },  /* DSI_CKSM_OUT */
+    { DSI(DSI_STATE_DBG0), 0x00001008, 0 },  /* DSI_STATE_DBG0 */
+    { DSI(DSI_STATE_DBG1), 0x00004000, 0 },  /* DSI_STATE_DBG1 */
+    { DSI(DSI_STATE_DBG2), 0x00000200, 0 },  /* DSI_STATE_DBG2 */
+    { DSI(DSI_STATE_DBG3), 0x00000210, 0 },  /* DSI_STATE_DBG3 */
+    { DSI(DSI_STATE_DBG4), 0x00000210, 0 },  /* DSI_STATE_DBG4 */
+    { DSI(DSI_STATE_DBG6), 0x00002000, 0 },  /* DSI_STATE_DBG6 */
+    { DSI(DSI_STATE_DBG7), 0x00000000, 0 },  /* DSI_STATE_DBG7 */
+    { DSI(DSI_STATE_DBG8), 0x00000000, 0 },  /* DSI_STATE_DBG8 */
+    { DSI(DSI_STATE_DBG9), 0x00000000, 0 },  /* DSI_STATE_DBG9 */
+    { DSI(DSI_DEBUG_SEL), 0x00000000, 0 },  /* DSI_DEBUG_SEL */
+    { DSI(DSI_RESERVED), 0x00000000, 0 },  /* DSI_RESERVED */
+    { DSI(DSI_BIST_PATTERN), 0x00000000, 0 },  /* DSI_BIST_PATTERN */
+    { DSI(DSI_BIST_CON), 0x00000000, 0 },  /* DSI_BIST_CON */
+    { DSI(DSI_CMDQ0), 0x00000000, 0 },  /* DSI_CMDQ0 */
 };
 
 /*
@@ -295,40 +319,40 @@ static const Mt6589DispReg mt6589_dsi_regs[] = {
  */
 
 static const Mt6589DispReg mt6589_dpi_regs[] = {
-    { 0x0000, 0x00000000, 0 },  /* DPI_EN */
-    { 0x0004, 0x00000000, 0 },  /* DPI_RST */
-    { 0x0008, 0x00000000, 0 },  /* DPI_INTEN */
-    { 0x000c, 0x00000000, 0 },  /* DPI_INTSTA */
-    { 0x0010, 0x00000000, 0 },  /* DPI_CON */
-    { 0x0014, 0x00000000, 0 },  /* DPI_CLKCON */
-    { 0x0018, 0x00000000, 0 },  /* DPI_SIZE */
-    { 0x0044, 0x00000000, 0 },  /* DPI_ESAV_VTIM_L */
-    { 0x0048, 0x00000000, 0 },  /* DPI_ESAV_VTIM_R */
-    { 0x004c, 0x00000000, 0 },  /* DPI_ESAV_FTIM */
-    { 0x0050, 0x00000400, 0 },  /* DPI_BG_HCNTL */
-    { 0x0054, 0x00000000, 0 },  /* DPI_BG_VCNTL */
-    { 0x0058, 0x00000000, 0 },  /* DPI_BG_COLOR */
-    { 0x005c, 0x00000000, 0 },  /* DPI_TGEN_POL */
-    { 0x0060, 0x00000000, 0 },  /* DPI_STATUS */
-    { 0x0064, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET0 */
-    { 0x0068, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET1 */
-    { 0x006c, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET2 */
-    { 0x0070, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET3 */
-    { 0x0074, 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET4 */
-    { 0x0078, 0x00000000, 0 },  /* DPI_MATRIX_PREADD_SET0 */
-    { 0x007c, 0x00000000, 0 },  /* DPI_MATRIX_PREADD_SET1 */
-    { 0x0080, 0x00000000, 0 },  /* DPI_MATRIX_POSTADD_SET0 */
-    { 0x0084, 0x00000000, 0 },  /* DPI_MATRIX_POSTADD_SET1 */
-    { 0x0088, 0x00000000, 0 },  /* DPI_CLPF_SET */
-    { 0x008c, 0x00000000, 0 },  /* DPI_Y_LIMIT */
-    { 0x0090, 0x00000000, 0 },  /* DPI_C_LIMIT */
-    { 0x0094, 0x00000000, 0 },  /* DPI_YUV422_S */
-    { 0x0098, 0x00000000, 0 },  /* DPI_YCMUX_SE */
-    { 0x009c, 0x00000000, 0 },  /* DPI_EMBSYNC_ */
-    { 0x00a8, 0x00000000, 0 },  /* DPI_OUTPUT_S */
-    { 0x00ac, 0x00000000, 0 },  /* DPI_TMODE */
-    { 0x00b0, 0x00000000, 0 },  /* DPI_CHKSUM */
-    { 0x00b4, 0x00000000, 0 },  /* DPI_PATTERN */
+    { DPI(DPI_EN), 0x00000000, 0 },  /* DPI_EN */
+    { DPI(DPI_RST), 0x00000000, 0 },  /* DPI_RST */
+    { DPI(DPI_INTEN), 0x00000000, 0 },  /* DPI_INTEN */
+    { DPI(DPI_INTSTA), 0x00000000, 0 },  /* DPI_INTSTA */
+    { DPI(DPI_CON), 0x00000000, 0 },  /* DPI_CON */
+    { DPI(DPI_CLKCON), 0x00000000, 0 },  /* DPI_CLKCON */
+    { DPI(DPI_SIZE), 0x00000000, 0 },  /* DPI_SIZE */
+    { DPI(DPI_ESAV_VTIM_L), 0x00000000, 0 },  /* DPI_ESAV_VTIM_L */
+    { DPI(DPI_ESAV_VTIM_R), 0x00000000, 0 },  /* DPI_ESAV_VTIM_R */
+    { DPI(DPI_ESAV_FTIM), 0x00000000, 0 },  /* DPI_ESAV_FTIM */
+    { DPI(DPI_BG_HCNTL), 0x00000400, 0 },  /* DPI_BG_HCNTL */
+    { DPI(DPI_BG_VCNTL), 0x00000000, 0 },  /* DPI_BG_VCNTL */
+    { DPI(DPI_BG_COLOR), 0x00000000, 0 },  /* DPI_BG_COLOR */
+    { DPI(DPI_TGEN_POL), 0x00000000, 0 },  /* DPI_TGEN_POL */
+    { DPI(DPI_STATUS), 0x00000000, 0 },  /* DPI_STATUS */
+    { DPI(DPI_MATRIX_COEFF_SET0M), 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET0 */
+    { DPI(DPI_MATRIX_COEFF_SET1), 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET1 */
+    { DPI(DPI_MATRIX_COEFF_SET2), 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET2 */
+    { DPI(DPI_MATRIX_COEFF_SET3), 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET3 */
+    { DPI(DPI_MATRIX_COEFF_SET4), 0x00000000, 0 },  /* DPI_MATRIX_COEFF_SET4 */
+    { DPI(DPI_MATRIX_PREADD_SET0), 0x00000000, 0 },  /* DPI_MATRIX_PREADD_SET0 */
+    { DPI(DPI_MATRIX_PREADD_SET1), 0x00000000, 0 },  /* DPI_MATRIX_PREADD_SET1 */
+    { DPI(DPI_MATRIX_POSTADD_SET0), 0x00000000, 0 },  /* DPI_MATRIX_POSTADD_SET0 */
+    { DPI(DPI_MATRIX_POSTADD_SET1), 0x00000000, 0 },  /* DPI_MATRIX_POSTADD_SET1 */
+    { DPI(DPI_CLPF_SETTING), 0x00000000, 0 },  /* DPI_CLPF_SET */
+    { DPI(DPI_Y_LIMIT), 0x00000000, 0 },  /* DPI_Y_LIMIT */
+    { DPI(DPI_C_LIMIT), 0x00000000, 0 },  /* DPI_C_LIMIT */
+    { DPI(DPI_YUV422_SETTING), 0x00000000, 0 },  /* DPI_YUV422_S */
+    { DPI(DPI_YCMUX_SETTING), 0x00000000, 0 },  /* DPI_YCMUX_SE */
+    { DPI(DPI_EMBSYNC_SETTING), 0x00000000, 0 },  /* DPI_EMBSYNC_ */
+    { DPI(DPI_OUTPUT_SETTING), 0x00000000, 0 },  /* DPI_OUTPUT_S */
+    { DPI(DPI_TMODE), 0x00000000, 0 },  /* DPI_TMODE */
+    { DPI(DPI_CHKSUM), 0x00000000, 0 },  /* DPI_CHKSUM */
+    { DPI(DPI_PATTERN), 0x00000000, 0 },  /* DPI_PATTERN */
 };
 
 /*
@@ -342,51 +366,51 @@ static const Mt6589DispReg mt6589_dpi_regs[] = {
  */
 
 static const Mt6589DispReg mt6589_wdma_regs[] = {
-    { 0x0000, 0x00000000, 0 },  /* WDMA_INTEN */
-    { 0x000c, 0x00000000, 0 },  /* WDMA_RST */
-    { 0x0014, 0x00000000, 0 },  /* WDMA_CFG */
-    { 0x0018, 0x00000000, 0 },  /* WDMA_SRC_SIZE */
-    { 0x001c, 0x00000000, 0 },  /* WDMA_CLIP_SIZE */
-    { 0x002c, 0x000000ff, 0 },  /* WDMA_ALPHA */
-    { 0x00a4, 0x00000000, 0 },  /* WDMA_EXEC_DBG */
-    { 0x00a8, 0x00000000, 0 },  /* WDMA_CLIP_DBG */
-    { 0x0004, 0x00000000, 0 },  /* WDMA_INTSTA */
-    { 0x0008, 0x00000000, 0 },  /* WDMA_EN */
-    { 0x0010, 0x0000c000, 0 },  /* WDMA_SMI_CON */
-    { 0x0020, 0x00000000, 0 },  /* WDMA_CLIP_COORD */
-    { 0x0024, 0x00000000, 0 },  /* WDMA_DST_ADDR */
-    { 0x0028, 0x00000000, 0 },  /* WDMA_DST_W_IN_BYTE */
-    { 0x0034, 0x00008000, 0 },  /* WDMA_STA */
-    { 0x0038, 0x000001fe, 0 },  /* WDMA_BUF_CON1 */
-    { 0x003c, 0x00000808, 0 },  /* WDMA_BUF_CON2 */
-    { 0x0040, 0x00000000, 0 },  /* WDMA_C00 */
-    { 0x0044, 0x00000000, 0 },  /* WDMA_C02 */
-    { 0x0048, 0x00000000, 0 },  /* WDMA_C10 */
-    { 0x004c, 0x00000000, 0 },  /* WDMA_C12 */
-    { 0x0050, 0x00000000, 0 },  /* WDMA_C20 */
-    { 0x0054, 0x00000000, 0 },  /* WDMA_C22 */
-    { 0x0058, 0x00000000, 0 },  /* WDMA_PRE_ADD0 */
-    { 0x005c, 0x00000000, 0 },  /* WDMA_PRE_ADD2 */
-    { 0x0060, 0x00000000, 0 },  /* WDMA_POST_ADD0 */
-    { 0x0064, 0x00000000, 0 },  /* WDMA_POST_ADD2 */
-    { 0x0070, 0x00000000, 0 },  /* WDMA_DST_U_ADDR */
-    { 0x0074, 0x00000000, 0 },  /* WDMA_DST_V_ADDR */
-    { 0x0078, 0x00000000, 0 },  /* WDMA_DST_UV_PITCH */
-    { 0x00a0, 0x00008000, 0 },  /* WDMA_FLOW_CTRL_DBG */
-    { 0x0100, 0x00000000, 0 },  /* WDMA_DUMMY */
-    { 0x0e00, 0x00000000, 0 },  /* WDMA_DITHER_0 */
-    { 0x0e14, 0x00000000, 0 },  /* WDMA_DITHER_5 */
-    { 0x0e18, 0x00000000, 0 },  /* WDMA_DITHER_6 */
-    { 0x0e1c, 0x00000000, 0 },  /* WDMA_DITHER_7 */
-    { 0x0e20, 0x00000000, 0 },  /* WDMA_DITHER_8 */
-    { 0x0e24, 0x00000000, 0 },  /* WDMA_DITHER_9 */
-    { 0x0e28, 0x00000000, 0 },  /* WDMA_DITHER_10 */
-    { 0x0e30, 0x00000000, 0 },  /* WDMA_DITHER_12 */
-    { 0x0e34, 0x00000000, 0 },  /* WDMA_DITHER_13 */
-    { 0x0e38, 0x00000000, 0 },  /* WDMA_DITHER_14 */
-    { 0x0e3c, 0x00000000, 0 },  /* WDMA_DITHER_15 */
-    { 0x0e40, 0x00000000, 0 },  /* WDMA_DITHER_16 */
-    { 0x0e44, 0x00000000, 0 },  /* WDMA_DITHER_17 */
+    { WDMA(WDMA_INTEN), 0x00000000, 0 },  /* WDMA_INTEN */
+    { WDMA(WDMA_RST), 0x00000000, 0 },  /* WDMA_RST */
+    { WDMA(WDMA_CFG), 0x00000000, 0 },  /* WDMA_CFG */
+    { WDMA(WDMA_SRC_SIZE), 0x00000000, 0 },  /* WDMA_SRC_SIZE */
+    { WDMA(WDMA_CLIP_SIZE), 0x00000000, 0 },  /* WDMA_CLIP_SIZE */
+    { WDMA(WDMA_ALPHA), 0x000000ff, 0 },  /* WDMA_ALPHA */
+    { WDMA(WDMA_EXEC_DBG), 0x00000000, 0 },  /* WDMA_EXEC_DBG */
+    { WDMA(WDMA_CLIP_DBG), 0x00000000, 0 },  /* WDMA_CLIP_DBG */
+    { WDMA(WDMA_INTSTA), 0x00000000, 0 },  /* WDMA_INTSTA */
+    { WDMA(WDMA_EN), 0x00000000, 0 },  /* WDMA_EN */
+    { WDMA(WDMA_SMI_CON), 0x0000c000, 0 },  /* WDMA_SMI_CON */
+    { WDMA(WDMA_CLIP_COORD), 0x00000000, 0 },  /* WDMA_CLIP_COORD */
+    { WDMA(WDMA_DST_ADDR), 0x00000000, 0 },  /* WDMA_DST_ADDR */
+    { WDMA(WDMA_DST_W_IN_BYTE), 0x00000000, 0 },  /* WDMA_DST_W_IN_BYTE */
+    { WDMA(WDMA_STA), 0x00008000, 0 },  /* WDMA_STA */
+    { WDMA(WDMA_BUF_CON1), 0x000001fe, 0 },  /* WDMA_BUF_CON1 */
+    { WDMA(WDMA_BUF_CON2), 0x00000808, 0 },  /* WDMA_BUF_CON2 */
+    { WDMA(WDMA_C00), 0x00000000, 0 },  /* WDMA_C00 */
+    { WDMA(WDMA_C02), 0x00000000, 0 },  /* WDMA_C02 */
+    { WDMA(WDMA_C10), 0x00000000, 0 },  /* WDMA_C10 */
+    { WDMA(WDMA_C12), 0x00000000, 0 },  /* WDMA_C12 */
+    { WDMA(WDMA_C20), 0x00000000, 0 },  /* WDMA_C20 */
+    { WDMA(WDMA_C22), 0x00000000, 0 },  /* WDMA_C22 */
+    { WDMA(WDMA_PRE_ADD0), 0x00000000, 0 },  /* WDMA_PRE_ADD0 */
+    { WDMA(WDMA_PRE_ADD2), 0x00000000, 0 },  /* WDMA_PRE_ADD2 */
+    { WDMA(WDMA_POST_ADD0), 0x00000000, 0 },  /* WDMA_POST_ADD0 */
+    { WDMA(WDMA_POST_ADD2), 0x00000000, 0 },  /* WDMA_POST_ADD2 */
+    { WDMA(WDMA_DST_U_ADDR), 0x00000000, 0 },  /* WDMA_DST_U_ADDR */
+    { WDMA(WDMA_DST_V_ADDR), 0x00000000, 0 },  /* WDMA_DST_V_ADDR */
+    { WDMA(WDMA_DST_UV_PITCH), 0x00000000, 0 },  /* WDMA_DST_UV_PITCH */
+    { WDMA(WDMA_FLOW_CTRL_DBG), 0x00008000, 0 },  /* WDMA_FLOW_CTRL_DBG */
+    { WDMA(WDMA_DUMMY), 0x00000000, 0 },  /* WDMA_DUMMY */
+    { WDMA(WDMA_DITHER_0), 0x00000000, 0 },  /* WDMA_DITHER_0 */
+    { WDMA(WDMA_DITHER_5), 0x00000000, 0 },  /* WDMA_DITHER_5 */
+    { WDMA(WDMA_DITHER_6), 0x00000000, 0 },  /* WDMA_DITHER_6 */
+    { WDMA(WDMA_DITHER_7), 0x00000000, 0 },  /* WDMA_DITHER_7 */
+    { WDMA(WDMA_DITHER_8), 0x00000000, 0 },  /* WDMA_DITHER_8 */
+    { WDMA(WDMA_DITHER_9), 0x00000000, 0 },  /* WDMA_DITHER_9 */
+    { WDMA(WDMA_DITHER_10), 0x00000000, 0 },  /* WDMA_DITHER_10 */
+    { WDMA(WDMA_DITHER_12), 0x00000000, 0 },  /* WDMA_DITHER_12 */
+    { WDMA(WDMA_DITHER_13), 0x00000000, 0 },  /* WDMA_DITHER_13 */
+    { WDMA(WDMA_DITHER_14), 0x00000000, 0 },  /* WDMA_DITHER_14 */
+    { WDMA(WDMA_DITHER_15), 0x00000000, 0 },  /* WDMA_DITHER_15 */
+    { WDMA(WDMA_DITHER_16), 0x00000000, 0 },  /* WDMA_DITHER_16 */
+    { WDMA(WDMA_DITHER_17), 0x00000000, 0 },  /* WDMA_DITHER_17 */
 };
 
 /*
@@ -400,69 +424,69 @@ static const Mt6589DispReg mt6589_wdma_regs[] = {
  */
 
 static const Mt6589DispReg mt6589_bls_regs[] = {
-    { 0x0018, 0x00000000, 0 },  /* BLS_SRC_SIZE */
-    { 0x001c, 0x00000000, 0 },  /* BLS_HIS_PROT */
-    { 0x0020, 0x00000000, 0 },  /* BLS_GAIN */
-    { 0x006c, 0x00000000, 0 },  /* BLS_SC_BIN_T */
-    { 0x0000, 0x00000000, 0 },  /* BLS_EN */
-    { 0x0004, 0x00000000, 0 },  /* BLS_RST */
-    { 0x0008, 0x00000000, 0 },  /* BLS_BLS_SETTING */
-    { 0x000c, 0x00000000, 0 },  /* BLS_HIS_SETTING */
-    { 0x0010, 0x00000000, 0 },  /* BLS_INTEN */
-    { 0x0014, 0x00000000, 0 },  /* BLS_INTSTA */
-    { 0x0024, 0x00000000, 0 },  /* BLS_DISTORT_POINT */
-    { 0x0028, 0x00000000, 0 },  /* BLS_GAIN_SETTING */
-    { 0x0030, 0x00000000, 0 },  /* BLS_GAMMA_SETTING */
-    { 0x0034, 0x00000000, 0 },  /* BLS_GAMMA_B */
-    { 0x0038, 0x00000000, 0 },  /* BLS_LUT_UPDATE */
-    { 0x003c, 0x00000000, 0 },  /* BLS_PWM_LUT_SEL */
-    { 0x0040, 0x000000ff, 0 },  /* BLS_MAXCLR_LIMIT */
-    { 0x0044, 0x00000000, 0 },  /* BLS_PRE_DIST_THD */
-    { 0x0048, 0x00000000, 0 },  /* BLS_DIST_THD_NORM */
-    { 0x004c, 0x00000000, 0 },  /* BLS_DIST_THD_DARK */
-    { 0x0050, 0x00000000, 0 },  /* BLS_DIST_THD_BRIGHT */
-    { 0x0054, 0x00000000, 0 },  /* BLS_DIST_THD_TEXT */
-    { 0x0058, 0x00000000, 0 },  /* BLS_DS_SETTING */
-    { 0x005c, 0x00000000, 0 },  /* BLS_BS_SETTING */
-    { 0x0060, 0x00000000, 0 },  /* BLS_TS_SETTING0 */
-    { 0x0064, 0x00000000, 0 },  /* BLS_TS_SETTING1 */
-    { 0x0070, 0x00000000, 0 },  /* BLS_FAST_IIR_ */
-    { 0x0074, 0x00000000, 0 },  /* BLS_FAST_IIR_ */
-    { 0x0078, 0x00000000, 0 },  /* BLS_SLOW_IIR_XCOEFF */
-    { 0x007c, 0x00000000, 0 },  /* BLS_SLOW_IIR_YCOEFF */
-    { 0x0080, 0x00000000, 0 },  /* BLS_PWM_DUTY */
-    { 0x0084, 0x00000001, 0 },  /* BLS_PWM_DUTY_GAIN */
-    { 0x0088, 0x00000000, 0 },  /* BLS_PATTERN */
-    { 0x0090, 0x00000000, 0 },  /* BLS_PWM_CON */
-    { 0x0094, 0x00008000, 0 },  /* PWM_H_DURATION */
-    { 0x0098, 0x00008000, 0 },  /* PWM_L_DURATION */
-    { 0x009c, 0x00000000, 0 },  /* PWM_G_DURATION */
-    { 0x00a0, 0x00000000, 0 },  /* PWM_SEND_DATA0 */
-    { 0x00a4, 0x00000000, 0 },  /* PWM_SEND_DATA1 */
-    { 0x00a8, 0x00000000, 0 },  /* PWM_WAVE_NUM */
-    { 0x00ac, 0x00000000, 0 },  /* PWM_DATA_WIDTH */
-    { 0x00b0, 0x00000000, 0 },  /* PWM_THRESH */
-    { 0x00b4, 0x00000000, 0 },  /* PWM_SEND_W */
-    { 0x0180, 0x00000000, 0 },  /* BLS_DARK_BIN */
-    { 0x0184, 0x00000000, 0 },  /* BLS_BRIGHT_BIN */
-    { 0x0200, 0x000001fe, 0 },  /* BLS_PWM_DUTY_RD */
-    { 0x0204, 0x0000ffff, 0 },  /* BLS_MAXCLR_RD */
-    { 0x0208, 0x00000080, 0 },  /* BLS_GAIN_RD */
-    { 0x020c, 0x00000000, 0 },  /* BLS_SC_RD */
-    { 0x0e00, 0x00000000, 0 },  /* BLS_DITHER_0 */
-    { 0x0e14, 0x00000000, 0 },  /* BLS_DITHER_5 */
-    { 0x0e18, 0x00000000, 0 },  /* BLS_DITHER_6 */
-    { 0x0e1c, 0x00000000, 0 },  /* BLS_DITHER_7 */
-    { 0x0e20, 0x00000000, 0 },  /* BLS_DITHER_8 */
-    { 0x0e24, 0x00000000, 0 },  /* BLS_DITHER_9 */
-    { 0x0e28, 0x00000000, 0 },  /* BLS_DITHER_10 */
-    { 0x0e2c, 0x00000000, 0 },  /* BLS_DITHER_11 */
-    { 0x0e30, 0x00000000, 0 },  /* BLS_DITHER_12 */
-    { 0x0e34, 0x00000000, 0 },  /* BLS_DITHER_13 */
-    { 0x0e38, 0x00000000, 0 },  /* BLS_DITHER_14 */
-    { 0x0e3c, 0x00000000, 0 },  /* BLS_DITHER_15 */
-    { 0x0e40, 0x00000000, 0 },  /* BLS_DITHER_16 */
-    { 0x0e44, 0x00000000, 0 },  /* BLS_DITHER_17 */
+    { BLS(BLS_SRC_SIZE), 0x00000000, 0 },  /* BLS_SRC_SIZE */
+    { BLS(BLS_HIS_PROT), 0x00000000, 0 },  /* BLS_HIS_PROT */
+    { BLS(BLS_GAIN), 0x00000000, 0 },  /* BLS_GAIN */
+    { BLS(BLS_SC_BIN_THD), 0x00000000, 0 },  /* BLS_SC_BIN_T */
+    { BLS(BLS_EN), 0x00000000, 0 },  /* BLS_EN */
+    { BLS(BLS_RST), 0x00000000, 0 },  /* BLS_RST */
+    { BLS(BLS_BLS_SETTING), 0x00000000, 0 },  /* BLS_BLS_SETTING */
+    { BLS(BLS_HIS_SETTING), 0x00000000, 0 },  /* BLS_HIS_SETTING */
+    { BLS(BLS_INTEN), 0x00000000, 0 },  /* BLS_INTEN */
+    { BLS(BLS_INTSTA), 0x00000000, 0 },  /* BLS_INTSTA */
+    { BLS(BLS_DISTORT_POINT), 0x00000000, 0 },  /* BLS_DISTORT_POINT */
+    { BLS(BLS_GAIN_SETTING), 0x00000000, 0 },  /* BLS_GAIN_SETTING */
+    { BLS(BLS_GAMMA_SETTING), 0x00000000, 0 },  /* BLS_GAMMA_SETTING */
+    { BLS(BLS_GAMMA_BOUNDARY), 0x00000000, 0 },  /* BLS_GAMMA_B */
+    { BLS(BLS_LUT_UPDATE), 0x00000000, 0 },  /* BLS_LUT_UPDATE */
+    { BLS(BLS_PWM_LUT_SEL), 0x00000000, 0 },  /* BLS_PWM_LUT_SEL */
+    { BLS(BLS_MAXCLR_LIMIT), 0x000000ff, 0 },  /* BLS_MAXCLR_LIMIT */
+    { BLS(BLS_PRE_DIST_THD), 0x00000000, 0 },  /* BLS_PRE_DIST_THD */
+    { BLS(BLS_DIST_THD_NORM), 0x00000000, 0 },  /* BLS_DIST_THD_NORM */
+    { BLS(BLS_DIST_THD_DARK), 0x00000000, 0 },  /* BLS_DIST_THD_DARK */
+    { BLS(BLS_DIST_THD_BRIGHT), 0x00000000, 0 },  /* BLS_DIST_THD_BRIGHT */
+    { BLS(BLS_DIST_THD_TEXT), 0x00000000, 0 },  /* BLS_DIST_THD_TEXT */
+    { BLS(BLS_DS_SETTING), 0x00000000, 0 },  /* BLS_DS_SETTING */
+    { BLS(BLS_BS_SETTING), 0x00000000, 0 },  /* BLS_BS_SETTING */
+    { BLS(BLS_TS_SETTING0), 0x00000000, 0 },  /* BLS_TS_SETTING0 */
+    { BLS(BLS_TS_SETTING1), 0x00000000, 0 },  /* BLS_TS_SETTING1 */
+    { BLS(BLS_FAST_IIR_XCOEFF), 0x00000000, 0 },  /* BLS_FAST_IIR_ */
+    { BLS(BLS_FAST_IIR_YCOEFF), 0x00000000, 0 },  /* BLS_FAST_IIR_ */
+    { BLS(BLS_SLOW_IIR_XCOEFF), 0x00000000, 0 },  /* BLS_SLOW_IIR_XCOEFF */
+    { BLS(BLS_SLOW_IIR_YCOEFF), 0x00000000, 0 },  /* BLS_SLOW_IIR_YCOEFF */
+    { BLS(BLS_PWM_DUTY), 0x00000000, 0 },  /* BLS_PWM_DUTY */
+    { BLS(BLS_PWM_DUTY_GAIN), 0x00000001, 0 },  /* BLS_PWM_DUTY_GAIN */
+    { BLS(BLS_PATTERN), 0x00000000, 0 },  /* BLS_PATTERN */
+    { BLS(BLS_PWM_CON), 0x00000000, 0 },  /* BLS_PWM_CON */
+    { BLS(PWM_H_DURATION), 0x00008000, 0 },  /* PWM_H_DURATION */
+    { BLS(PWM_L_DURATION), 0x00008000, 0 },  /* PWM_L_DURATION */
+    { BLS(PWM_G_DURATION), 0x00000000, 0 },  /* PWM_G_DURATION */
+    { BLS(PWM_SEND_DATA0), 0x00000000, 0 },  /* PWM_SEND_DATA0 */
+    { BLS(PWM_SEND_DATA1), 0x00000000, 0 },  /* PWM_SEND_DATA1 */
+    { BLS(PWM_WAVE_NUM), 0x00000000, 0 },  /* PWM_WAVE_NUM */
+    { BLS(PWM_DATA_WIDTH), 0x00000000, 0 },  /* PWM_DATA_WIDTH */
+    { BLS(PWM_THRESH), 0x00000000, 0 },  /* PWM_THRESH */
+    { BLS(PWM_SEND_WAVENUM), 0x00000000, 0 },  /* PWM_SEND_W */
+    { BLS(BLS_DARK_BIN), 0x00000000, 0 },  /* BLS_DARK_BIN */
+    { BLS(BLS_BRIGHT_BIN), 0x00000000, 0 },  /* BLS_BRIGHT_BIN */
+    { BLS(BLS_PWM_DUTY_RD), 0x000001fe, 0 },  /* BLS_PWM_DUTY_RD */
+    { BLS(BLS_MAXCLR_RD), 0x0000ffff, 0 },  /* BLS_MAXCLR_RD */
+    { BLS(BLS_GAIN_RD), 0x00000080, 0 },  /* BLS_GAIN_RD */
+    { BLS(BLS_SC_RD), 0x00000000, 0 },  /* BLS_SC_RD */
+    { BLS(BLS_DITHER_0), 0x00000000, 0 },  /* BLS_DITHER_0 */
+    { BLS(BLS_DITHER_5), 0x00000000, 0 },  /* BLS_DITHER_5 */
+    { BLS(BLS_DITHER_6), 0x00000000, 0 },  /* BLS_DITHER_6 */
+    { BLS(BLS_DITHER_7), 0x00000000, 0 },  /* BLS_DITHER_7 */
+    { BLS(BLS_DITHER_8), 0x00000000, 0 },  /* BLS_DITHER_8 */
+    { BLS(BLS_DITHER_9), 0x00000000, 0 },  /* BLS_DITHER_9 */
+    { BLS(BLS_DITHER_10), 0x00000000, 0 },  /* BLS_DITHER_10 */
+    { BLS(BLS_DITHER_11), 0x00000000, 0 },  /* BLS_DITHER_11 */
+    { BLS(BLS_DITHER_12), 0x00000000, 0 },  /* BLS_DITHER_12 */
+    { BLS(BLS_DITHER_13), 0x00000000, 0 },  /* BLS_DITHER_13 */
+    { BLS(BLS_DITHER_14), 0x00000000, 0 },  /* BLS_DITHER_14 */
+    { BLS(BLS_DITHER_15), 0x00000000, 0 },  /* BLS_DITHER_15 */
+    { BLS(BLS_DITHER_16), 0x00000000, 0 },  /* BLS_DITHER_16 */
+    { BLS(BLS_DITHER_17), 0x00000000, 0 },  /* BLS_DITHER_17 */
 };
 
 /*
@@ -476,26 +500,26 @@ static const Mt6589DispReg mt6589_bls_regs[] = {
  */
 
 static const Mt6589DispReg mt6589_gamma_regs[] = {
-    { 0x0000, 0x00000000, 0 },  /* DISP_GAMMA_EN */
-    { 0x0004, 0x00000000, 0 },  /* DISP_GAMMA_ */
-    { 0x0008, 0x00000000, 0 },  /* DISP_GAMMA_LUT_CLK_EN */
-    { 0x000c, 0x00000000, 0 },  /* DISP_GAMMA_I */
-    { 0x0010, 0x00000000, 0 },  /* DISP_GAMMA_I */
-    { 0x0e00, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_0 */
-    { 0x0e10, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_4 */
-    { 0x0e14, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_5 */
-    { 0x0e18, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_6 */
-    { 0x0e1c, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_7 */
-    { 0x0e20, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_8 */
-    { 0x0e24, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_9 */
-    { 0x0e28, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_10 */
-    { 0x0e2c, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_11 */
-    { 0x0e30, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_12 */
-    { 0x0e34, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_13 */
-    { 0x0e38, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_14 */
-    { 0x0e3c, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_15 */
-    { 0x0e40, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_16 */
-    { 0x0e44, 0x00000000, 0 },  /* DISP_GAMMA_DITHER_17 */
+    { GAMMA(DISP_GAMMA_EN), 0x00000000, 0 },  /* DISP_GAMMA_EN */
+    { GAMMA(DISP_GAMMA_RST), 0x00000000, 0 },  /* DISP_GAMMA_ */
+    { GAMMA(DISP_GAMMA_LUT_CLK_EN), 0x00000000, 0 },  /* DISP_GAMMA_LUT_CLK_EN */
+    { GAMMA(DISP_GAMMA_INTEN), 0x00000000, 0 },  /* DISP_GAMMA_I */
+    { GAMMA(DISP_GAMMA_INTSTA), 0x00000000, 0 },  /* DISP_GAMMA_I */
+    { GAMMA(DISP_GAMMA_DITHER_0), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_0 */
+    { GAMMA(DISP_GAMMA_DITHER_4), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_4 */
+    { GAMMA(DISP_GAMMA_DITHER_5), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_5 */
+    { GAMMA(DISP_GAMMA_DITHER_6), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_6 */
+    { GAMMA(DISP_GAMMA_DITHER_7), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_7 */
+    { GAMMA(DISP_GAMMA_DITHER_8), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_8 */
+    { GAMMA(DISP_GAMMA_DITHER_9), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_9 */
+    { GAMMA(DISP_GAMMA_DITHER_10), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_10 */
+    { GAMMA(DISP_GAMMA_DITHER_11), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_11 */
+    { GAMMA(DISP_GAMMA_DITHER_12), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_12 */
+    { GAMMA(DISP_GAMMA_DITHER_13), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_13 */
+    { GAMMA(DISP_GAMMA_DITHER_14), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_14 */
+    { GAMMA(DISP_GAMMA_DITHER_15M), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_15 */
+    { GAMMA(DISP_GAMMA_DITHER_16), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_16 */
+    { GAMMA(DISP_GAMMA_DITHER_17), 0x00000000, 0 },  /* DISP_GAMMA_DITHER_17 */
 };
 
 static const Mt6589DispBlock mt6589_disp_blocks[] = {
@@ -509,15 +533,15 @@ static const Mt6589DispBlock mt6589_disp_blocks[] = {
      * The generated header mt6589-dispsys_config-regs.h lists the 48 registers.
      */
     { "config", 0x14000000, NULL, 0, false, 0, true },
-    BLOCK("ovl",   0x14003000, mt6589_ovl_regs,   163),
-    BLOCK("rdma",  0x14006000, mt6589_rdma_regs,  0),
-    BLOCK("color", 0x1400a000, mt6589_color_regs, 0),
-    BLOCK("mutex", 0x14011000, mt6589_mutex_regs, 192),
-    BLOCK("wdma",  0x14004000, mt6589_wdma_regs,  0),
-    BLOCK("bls",   0x14008000, mt6589_bls_regs,   0),
-    BLOCK("gamma", 0x14009000, mt6589_gamma_regs, 0),
-    BLOCK("dsi",   0x1400d000, mt6589_dsi_regs,   204),
-    BLOCK("dpi",   0x1400e000, mt6589_dpi_regs,   205),
+    BLOCK("ovl",   MT6589_DISP_OVL_BASE,    mt6589_ovl_regs,   163),
+    BLOCK("rdma",  MT6589_DISP_RDMA_BASE,   mt6589_rdma_regs,  0),
+    BLOCK("color", MT6589_DISP_COLOR_BASE,  mt6589_color_regs, 0),
+    BLOCK("mutex", MT6589_DISP_MUTEX_BASE,  mt6589_mutex_regs, 192),
+    BLOCK("wdma",  MT6589_DISP_WDMA_BASE,   mt6589_wdma_regs,  0),
+    BLOCK("bls",   MT6589_DISP_BLS_BASE,    mt6589_bls_regs,   0),
+    BLOCK("gamma", MT6589_DISP_GAMMA_BASE,  mt6589_gamma_regs, 0),
+    BLOCK("dsi",   MT6589_DSI_BASE,         mt6589_dsi_regs,   204),
+    BLOCK("dpi",   MT6589_DPI_BASE,         mt6589_dpi_regs,   205),
 };
 
 /* ------------------------------------------------------------------------- */
@@ -1038,7 +1062,7 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
      * the behaviour the wait is modelling - and let the write path still latch
      * it for drivers that do use the interrupt.
      */
-    if ((s->desc->base == 0x14006000 || s->desc->base == 0x14007000) &&
+    if ((s->desc->base == MT6589_DISP_RDMA_BASE || s->desc->base == MT6589_DISP_RDMA_BASE + 0x1000) &&
         offset == 0x0004 &&
         (s->regs[0x0010 >> 2] & 1u || s->regs[0x0040 >> 2])) {
         /*
@@ -1092,18 +1116,15 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
  * line is (status & enable) as everywhere else. A driver that asked for an event gets one; nothing
  * is invented about which bit means what.
  */
-/* OVL keeps its interrupt pair two registers earlier: INTEN 0x04, INTSTA 0x08. */
-#define OVL_INTEN_REG   0x0004
-#define OVL_INTSTA_REG  0x0008
-
+/* OVL keeps its interrupt pair two registers earlier than the panel blocks. */
 static uint32_t mt6589_disp_int_en_reg(const Mt6589DispBlockState *s)
 {
-    return (s->desc->base == 0x14003000) ? OVL_INTEN_REG : 0x0008;
+    return (s->desc->base == MT6589_DISP_OVL_BASE) ? OVL(OVL_INTEN) : DSI(DSI_INTEN);
 }
 
 static uint32_t mt6589_disp_int_sta_reg(const Mt6589DispBlockState *s)
 {
-    return (s->desc->base == 0x14003000) ? OVL_INTSTA_REG : 0x000c;
+    return (s->desc->base == MT6589_DISP_OVL_BASE) ? OVL(OVL_INTSTA) : DSI(DSI_INTSTA);
 }
 
 static void mt6589_disp_panel_irq(Mt6589DispBlockState *s)
@@ -1147,9 +1168,22 @@ static void mt6589_disp_mutex_update_irq(Mt6589DispBlockState *s)
     /* MUTEX_INTEN at 0x0000, MUTEX_INTSTA at 0x0004. */
     uint32_t en = s->regs[MUTEX(DISP_MUTEX_INTEN) >> 2];
     uint32_t sta = s->regs[MUTEX(DISP_MUTEX_INTSTA) >> 2];
+    bool level = (en & sta) != 0;
 
     if (s->desc->has_irq) {
-        qemu_set_irq(s->irq, (en & sta) != 0);
+        /*
+         * Log the rising edges when tracing: "the driver waits for an interrupt" and "the
+         * interrupt is raised" are different claims, and the trace is what tells them apart.
+         */
+        static bool last_level;
+        static unsigned rises;
+
+        if (mt6589_disp_log_enabled() && level && !last_level && (rises++ < 8)) {
+            fprintf(stderr, "DISP mutex line -> 1 (rise #%u, inten=%08" PRIx32
+                    " intsta=%08" PRIx32 ")\n", rises, en, sta);
+        }
+        last_level = level;
+        qemu_set_irq(s->irq, level);
     }
 }
 
@@ -1179,12 +1213,16 @@ static void mt6589_disp_mutex_vsync(void *opaque)
      * the mutex raises. Gating the events on EN alone meant they were never raised, and
      * mtkfb_probe's wait_event (prepare_to_wait/schedule_timeout in the binary) could not complete.
      */
-    bool enabled = (s->regs[MUTEX(DISP_MUTEX0_EN) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX0) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX1) >> 2] & 1u);
-
-    if (!enabled) {
+    /*
+     * Once the mutex unit has been programmed it raises its event every frame, whatever the
+     * request state is at that instant. Gating on "currently held" fails for the same reason
+     * gating on EN did: the driver releases the mutex and *then* waits for the event, so a tick
+     * that arrived between the two found nothing to report - measured as zero rising edges on the
+     * interrupt line across a whole boot.
+     */
+    if (!s->panel_count && !(s->regs[MUTEX(DISP_MUTEX0_MOD) >> 2] ||
+                             s->regs[MUTEX(DISP_MUTEX0) >> 2] ||
+                             s->regs[MUTEX(DISP_MUTEX0_EN) >> 2])) {
         return;
     }
     s->vsync_count++;
@@ -1197,16 +1235,13 @@ static void mt6589_disp_mutex_vsync(void *opaque)
 static void mt6589_disp_mutex_kick(Mt6589DispBlockState *s)
 {
     /*
-     * A mutex is active when it has been enabled *or* acquired. This kernel never writes
-     * MUTEXn_EN - measured across a whole boot: CFG_MUTEX(0) is written 1 then 0, and 0x20 is not
-     * written at all - while it does take the mutex and then waits for the per-frame event that
-     * the mutex raises. Gating the events on EN alone meant they were never raised, and
-     * mtkfb_probe's wait_event (prepare_to_wait/schedule_timeout in the binary) could not complete.
+     * A mutex starts raising events once it has been programmed. This kernel never writes
+     * MUTEXn_EN (0x20) at all - measured - and it releases the mutex before waiting for the event,
+     * so neither "enabled" nor "currently held" is the right condition; "has been used" is.
      */
-    bool enabled = (s->regs[MUTEX(DISP_MUTEX0_EN) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX0) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX1) >> 2] & 1u);
+    bool enabled = (s->regs[MUTEX(DISP_MUTEX0_MOD) >> 2] ||
+                    s->regs[MUTEX(DISP_MUTEX0) >> 2] ||
+                    s->regs[MUTEX(DISP_MUTEX0_EN) >> 2]) != 0;
     static int no_vsync = -1;
 
     /*
@@ -1262,9 +1297,21 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
         /* Idle status: not writable. */
         return;
     }
+    if (r->flags & MREG_W0C) {
+        /*
+         * MTK's display interrupt handler acknowledges with ~status, i.e. it writes zero to the
+         * bits it saw set. Treating this register as write-1-to-clear left bit 0 set for ever, and
+         * the level-triggered line then delivered 1.8 million interrupts in 70 seconds - measured.
+         */
+        s->regs[offset >> 2] &= (uint32_t)value;
+        if (s->desc->base == MT6589_DISP_MUTEX_BASE) {
+            mt6589_disp_mutex_update_irq(s);
+        }
+        return;
+    }
     if (r->flags & MREG_W1C) {
         s->regs[offset >> 2] &= ~((uint32_t)value);
-        if (s->desc->base == 0x14011000) {   /* MUTEX: INTSTA just cleared */
+        if (s->desc->base == MT6589_DISP_MUTEX_BASE) {   /* MUTEX: INTSTA just cleared */
             mt6589_disp_mutex_update_irq(s);
         }
         return;
@@ -1284,7 +1331,7 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
      * at which the mutex reports to the interrupt controller. The SOF registers
      * are at 0x002c and 0x004c with MUTEX0_EN at 0x0020 / MUTEX1_EN at 0x0040.
      */
-    if (s->desc->base == 0x14011000) {
+    if (s->desc->base == MT6589_DISP_MUTEX_BASE) {
         /*
          * CFG_MUTEX(n) at 0x24 + n*0x20: bit 0 is the request the driver writes and
          * bit 1 is the grant, which is what the driver actually waits for:
@@ -1351,7 +1398,7 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
     }
 
     /* The OVL is the composer: any write may be the one that completes a modeset. */
-    if (s->desc->base == 0x14003000) {
+    if (s->desc->base == MT6589_DISP_OVL_BASE) {
         mt6589_ovl_kick(s);
     }
     /*
@@ -1360,11 +1407,11 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
      * the overlay is the one that runs it - measured in the binary's callee list. So the overlay's
      * events are raised once per frame, the same way as the panel's.
      */
-    if (s->desc->base == 0x14003000 && offset == OVL_INTEN_REG) {
+    if (s->desc->base == MT6589_DISP_OVL_BASE && offset == OVL(OVL_INTEN)) {
         mt6589_disp_panel_kick(s);
     }
     /* DSI/DPI: an enable written here starts their per-frame events. */
-    if (s->desc->base == 0x1400d000 || s->desc->base == 0x1400e000) {
+    if (s->desc->base == MT6589_DSI_BASE || s->desc->base == MT6589_DPI_BASE) {
         if (offset == 0x0008) {
             mt6589_disp_panel_kick(s);
         } else if (offset == 0x000c) {
@@ -1403,7 +1450,7 @@ static void mt6589_disp_realize(DeviceState *dev, Error **errp)
      * Only the OVL gets a console, because it is the block whose output the panel
      * shows. The other instances are configuration registers with nothing to draw.
      */
-    if (s->desc->base == 0x14003000) {
+    if (s->desc->base == MT6589_DISP_OVL_BASE) {
         s->con = qemu_graphic_console_create(dev, 0, &mt6589_ovl_gfx_ops, s);
         if (s->con) {
             qemu_console_resize(s->con, 1280, 800);
@@ -1411,12 +1458,12 @@ static void mt6589_disp_realize(DeviceState *dev, Error **errp)
         timer_init_ns(&s->frame_timer, QEMU_CLOCK_VIRTUAL,
                       mt6589_ovl_frame_tick, s);
     }
-    if (s->desc->base == 0x14011000) {
+    if (s->desc->base == MT6589_DISP_MUTEX_BASE) {
         timer_init_ns(&s->vsync_timer, QEMU_CLOCK_VIRTUAL,
                       mt6589_disp_mutex_vsync, s);
     }
-    if (s->desc->base == 0x1400d000 || s->desc->base == 0x1400e000 ||
-        s->desc->base == 0x14003000) {
+    if (s->desc->base == MT6589_DSI_BASE || s->desc->base == MT6589_DPI_BASE ||
+        s->desc->base == MT6589_DISP_OVL_BASE) {
         timer_init_ns(&s->panel_timer, QEMU_CLOCK_VIRTUAL,
                       mt6589_disp_panel_tick, s);
     }
@@ -1489,11 +1536,11 @@ void mt6589_disp_create(Mt6589State *soc, DeviceState *gic)
             sysbus_connect_irq(SYS_BUS_DEVICE(s), 0,
                                qdev_get_gpio_in(gic, MT6589_GIC_GPIO(b->irq_spi)));
         }
-        if (b->base == 0x14003000) {
+        if (b->base == MT6589_DISP_OVL_BASE) {
             ovl = s;
-        } else if (b->base == 0x14000000) {
+        } else if (b->base == MT6589_DISPSYS_CONFIG_BASE) {
             cfg = s;
-        } else if (b->base == 0x14006000) {
+        } else if (b->base == MT6589_DISP_RDMA_BASE) {
             rdma = s;
         }
     }

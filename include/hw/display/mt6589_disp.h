@@ -24,6 +24,7 @@ struct Mt6589State;
 #define MREG_W1C    (1u << 0)   /* writing 1 clears the bit */
 #define MREG_SELFCL (1u << 1)   /* writing 1 is a trigger; reads back 0 */
 #define MREG_IDLE   (1u << 2)   /* reads as a constant status value */
+#define MREG_W0C    (1u << 3)   /* writing 0 clears the bit (MTK mutex ack) */
 
 typedef struct Mt6589DispReg {
     uint16_t offset;
