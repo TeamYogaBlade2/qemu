@@ -1172,8 +1172,17 @@ static void mt6589_disp_mutex_update_irq(Mt6589DispBlockState *s)
 static void mt6589_disp_mutex_vsync(void *opaque)
 {
     Mt6589DispBlockState *s = opaque;
+    /*
+     * A mutex is active when it has been enabled *or* acquired. This kernel never writes
+     * MUTEXn_EN - measured across a whole boot: CFG_MUTEX(0) is written 1 then 0, and 0x20 is not
+     * written at all - while it does take the mutex and then waits for the per-frame event that
+     * the mutex raises. Gating the events on EN alone meant they were never raised, and
+     * mtkfb_probe's wait_event (prepare_to_wait/schedule_timeout in the binary) could not complete.
+     */
     bool enabled = (s->regs[MUTEX(DISP_MUTEX0_EN) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u);
+                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u) ||
+                    (s->regs[MUTEX(DISP_MUTEX0) >> 2] & 1u) ||
+                    (s->regs[MUTEX(DISP_MUTEX1) >> 2] & 1u);
 
     if (!enabled) {
         return;
@@ -1187,8 +1196,17 @@ static void mt6589_disp_mutex_vsync(void *opaque)
 
 static void mt6589_disp_mutex_kick(Mt6589DispBlockState *s)
 {
+    /*
+     * A mutex is active when it has been enabled *or* acquired. This kernel never writes
+     * MUTEXn_EN - measured across a whole boot: CFG_MUTEX(0) is written 1 then 0, and 0x20 is not
+     * written at all - while it does take the mutex and then waits for the per-frame event that
+     * the mutex raises. Gating the events on EN alone meant they were never raised, and
+     * mtkfb_probe's wait_event (prepare_to_wait/schedule_timeout in the binary) could not complete.
+     */
     bool enabled = (s->regs[MUTEX(DISP_MUTEX0_EN) >> 2] & 1u) ||
-                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u);
+                    (s->regs[MUTEX(DISP_MUTEX1_EN) >> 2] & 1u) ||
+                    (s->regs[MUTEX(DISP_MUTEX0) >> 2] & 1u) ||
+                    (s->regs[MUTEX(DISP_MUTEX1) >> 2] & 1u);
     static int no_vsync = -1;
 
     /*
@@ -1297,8 +1315,9 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
             /* INTEN changed: the level follows status & enable. */
             mt6589_disp_mutex_update_irq(s);
         }
-        /* Enabling or disabling a mutex starts or stops the per-frame event. */
-        if (offset == MUTEX(DISP_MUTEX0_EN) || offset == MUTEX(DISP_MUTEX1_EN)) {
+        /* Enabling, disabling or acquiring a mutex starts or stops the per-frame event. */
+        if (offset == MUTEX(DISP_MUTEX0_EN) || offset == MUTEX(DISP_MUTEX1_EN) ||
+            offset == MUTEX(DISP_MUTEX0) || offset == MUTEX(DISP_MUTEX1)) {
             mt6589_disp_mutex_kick(s);
         }
 
