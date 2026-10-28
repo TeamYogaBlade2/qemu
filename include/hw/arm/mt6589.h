@@ -395,7 +395,6 @@ struct Mt6589State {
     Mt6589PwrapBridgeState *pwrap_bridge;
     Mt6320PmicState *pmic;
     Mt6589GpioState *gpio;
-    Mt6589GpioState *gpio1;
     Mt6589EintState *eint;
     QEMUTimer *pmic_pulse;
     QEMUTimer *pmic_pulse_drop;

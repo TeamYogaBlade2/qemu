@@ -17,6 +17,8 @@ struct Mt6589GpioState {
 
     MemoryRegion iomem;
     uint32_t regs[0x1000 / 4];
+    /* Only serve the registers the window documents (see mt6589_gpio1_regs.h). */
+    bool strict;
 };
 
 #endif /* HW_GPIO_MT6589_GPIO_H */

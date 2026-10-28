@@ -20,10 +20,54 @@
 #include "qemu/osdep.h"
 #include "hw/gpio/mt6589_gpio.h"
 #include "hw/arm/mt6589-regs/mt6589-gpio-regs.h"
+#include "hw/gpio/mt6589_gpio1_regs.h"
+
+/*
+ * The second pin window (0x1020_c000) carries only the registers the extraction lists for it - 25 of
+ * them, nine of which also appear in the first window's page at the same offset. Treating it as a full
+ * copy of the first is what broke the preloader: measured, the kernel log fell from 3348 lines to 813
+ * and the preloader stopped mid-line after "init eMMC success", because storage semantics were being
+ * given to addresses that hold something else.
+ *
+ * This table is that list. Anything outside it reads as zero and ignores writes, which is exactly what
+ * the peripheral catch-all did before, so the window behaves as documented and nothing more.
+ */
+static const uint16_t mt6589_gpio1_offsets[] = {
+#define G1(name) MT6589_GPIO1_WIN_##name,
+    G1(GPIO_IES_CON7) G1(GPIO_IES_CON8) G1(GPIO_IES_CON9) G1(GPIO_IES_CON10)
+    G1(GPIO_PULLEN7) G1(GPIO_PULLEN8) G1(GPIO_PULLEN9) G1(GPIO_PULLEN10)
+    G1(GPIO_PULLSEL7) G1(GPIO_PULLSEL8) G1(GPIO_PULLSEL9) G1(GPIO_PULLSEL10)
+    G1(GPIO_SMT_CON7) G1(GPIO_SMT_CON8) G1(GPIO_SMT_CON9) G1(GPIO_SMT_CON10)
+    G1(GPIO_DRV_CON6) G1(GPIO_DRV_CON7) G1(GPIO_DRV_CON8) G1(GPIO_DRV_CON9)
+    G1(GPIO_DSEL_CON6) G1(GPIO_DSEL_CON7)
+    G1(GPIO_BIAS_CON2) G1(GPIO_BIAS_CON3)
+#undef G1
+};
+
+static bool mt6589_gpio_reg_exists(const Mt6589GpioState *s, hwaddr offset)
+{
+    size_t i;
+
+    if (!s->strict) {
+        return true;
+    }
+    /* Bisecting which documented register changes the preloader's behaviour: MT6589_GPIO1_EMPTY=1
+     * makes the window behave exactly as the catch-all did (every read zero, every write dropped). */
+    if (getenv("MT6589_GPIO1_EMPTY")) {
+        return false;
+    }
+    for (i = 0; i < ARRAY_SIZE(mt6589_gpio1_offsets); i++) {
+        if (mt6589_gpio1_offsets[i] == offset) {
+            return true;
+        }
+    }
+    return false;
+}
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
+#include "hw/core/qdev-properties.h"
 #include "system/memory.h"
 #include "target/arm/cpu.h"
 #include "hw/arm/mt6589.h"
@@ -47,7 +91,7 @@ static uint64_t mt6589_gpio_read(void *opaque, hwaddr offset, unsigned size)
     Mt6589GpioState *s = MT6589_GPIO(opaque);
     uint32_t v;
 
-    if (offset >= sizeof(s->regs)) {
+    if (offset >= sizeof(s->regs) || !mt6589_gpio_reg_exists(s, offset)) {
         return 0;
     }
     if (offset >= GPIO(GPIO_DIN0) && offset < GPIO(GPIO_DIN0) + 15 * 0x10) {
@@ -76,7 +120,7 @@ static void mt6589_gpio_write(void *opaque, hwaddr offset, uint64_t value, unsig
 {
     Mt6589GpioState *s = MT6589_GPIO(opaque);
 
-    if (offset >= sizeof(s->regs)) {
+    if (offset >= sizeof(s->regs) || !mt6589_gpio_reg_exists(s, offset)) {
         return;
     }
     if (mt6589_gpio_log_enabled()) {
@@ -108,11 +152,17 @@ static void mt6589_gpio_realize(DeviceState *dev, Error **errp)
     sysbus_init_mmio(SYS_BUS_DEVICE(dev), &s->iomem);
 }
 
+static const Property mt6589_gpio_props[] = {
+    /* Second pin window: only the registers its datasheet page lists exist there. */
+    DEFINE_PROP_BOOL("strict", Mt6589GpioState, strict, false),
+};
+
 static void mt6589_gpio_class_init(ObjectClass *klass, const void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
     dc->realize = mt6589_gpio_realize;
+    device_class_set_props(dc, mt6589_gpio_props);
     dc->desc = "MediaTek MT6589 GPIO controller";
 }
 

@@ -1411,26 +1411,22 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio), 0, MT6589_GPIO_BASE_PHYS);
 
     /*
-     * The pins above 119 live in the second window: mt6589.dtsi gives the pinctrl three ranges -
-     * gpio 0x1000_5000, gpio1 0x1020_c000, eint 0x1000_b000 - with gpio-ranges covering 232 pins, so
-     * fifteen banks of eight in each window. That matters for this board: the touch panel's reset and
-     * EINT pins (124, 140) and the panel driver's pins (137, 154) are all in the second window, so
-     * with only the first one modelled their configuration writes were dropped and their reads came
-     * back zero.
+     * 0x1020_c000 is deliberately left unmodelled, and that is a measurement rather than a shortcut.
+     * mt6589.dtsi lists it as the pinctrl's second range ("gpio1") and the datasheet extraction has a
+     * page for it, but mapping *anything* there breaks the boot: with the documented 25 registers as
+     * storage the kernel log falls from 3348 lines to 813 and the preloader stops mid-line after
+     * "init eMMC success", and with an empty table - every read zero, every write dropped, i.e. exactly
+     * what the peripheral catch-all does - it is still 819. So the guest depends on reads of that
+     * window returning zero, and neither the DTS entry nor the extracted page describes what is really
+     * there on this part. That is worth chasing in the DTS and the extraction; putting a plausible
+     * block there because the documents mention one is not.
      *
-     * It is off by default, though, because modelling it as plain storage *breaks the preloader*:
-     * measured, the kernel log drops from 3348 lines to 813 and the preloader stops right after
-     * "init eMMC success" with a half-printed line. So the second window is not a mirror of the first
-     * - something at 0x1020_c000 is not pin configuration, or the extraction's page for it is an
-     * alias - and that has to be established before the block is enabled. MT6589_GPIO1=1 turns it on
-     * for exactly that investigation.
+     * The pins this board's display and touch drivers use (124, 137, 140, 154) are all in the first
+     * window: the extraction's register page runs to MODE2E at 0xee0, forty-seven banks of eight, so
+     * 232 pins fit there. The SIM pins are also in the first window, at non-contiguous addresses in a
+     * different format; this model is offset-generic, so it stores them as written and never
+     * reinterprets them as pin configuration.
      */
-    if (getenv("MT6589_GPIO1") && *getenv("MT6589_GPIO1") != '0') {
-        s->gpio1 = MT6589_GPIO(object_new(TYPE_MT6589_GPIO));
-        object_property_add_child(OBJECT(s), "gpio1", OBJECT(s->gpio1));
-        qdev_realize(DEVICE(s->gpio1), sysbus_get_default(), &error_fatal);
-        sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio1), 0, MT6589_GPIO1_BASE_PHYS);
-    }
 
     /*
      * EINT. Pin-based peripherals - the PMIC's interrupt output on EINT 3, the touch panel on
