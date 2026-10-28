@@ -1,3 +1,10 @@
+config MT6589
+    bool
+    default y
+    depends on ARM
+    select SERIAL
+    select ARM_GIC
+
 config ARM_VIRT
     bool
     default y

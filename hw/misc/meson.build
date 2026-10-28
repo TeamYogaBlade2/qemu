@@ -1,3 +1,10 @@
+system_ss.add(when: 'CONFIG_MT6589', if_true: files('mt6589_eint.c', 'mt6589_pwrap_bridge.c', 'mt6320_pmic.c'))
+system_ss.add(when: 'CONFIG_MT6589_PWRAP', if_true: files('mt6589_pwrap.c'))
+system_ss.add(when: 'CONFIG_MT6589_DRAMC', if_true: files('mt6589_dramc.c'))
+system_ss.add(when: 'CONFIG_MT6589_EFUSE', if_true: files('mt6589_efuse.c'))
+system_ss.add(when: 'CONFIG_MT6589_TOPRGU', if_true: files('mt6589_toprgu.c'))
+system_ss.add(when: 'CONFIG_MT6589_NFI', if_true: files('mt6589_nfi.c'))
+system_ss.add(when: 'CONFIG_MT6589_AUXADC', if_true: files('mt6589_auxadc.c'))
 system_ss.add(when: 'CONFIG_APPLESMC', if_true: files('applesmc.c'))
 
 system_ss.add(when: 'CONFIG_EDU', if_true: files('edu.c'))

@@ -267,3 +267,28 @@ config SOPHGO_CV1800B_CLK
     bool
 
 source macio/Kconfig
+
+config MT6589_NFI
+    bool
+    default y
+
+config MT6589_TOPRGU
+    bool
+    default y
+
+config MT6589_EFUSE
+    bool
+    default y
+
+config MT6589_AUXADC
+    bool
+    default y
+
+config MT6589_PWRAP
+    bool
+    default y
+
+config MT6589_DRAMC
+    bool
+    default y
+    depends on MT6589

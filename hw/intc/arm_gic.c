@@ -58,7 +58,20 @@ static const uint8_t gic_id_gicv2[] = {
 
 static inline int gic_get_current_cpu(GICState *s)
 {
-    if (!qtest_enabled() && s->num_cpu > 1) {
+    /*
+     * current_cpu is only set while a vCPU is executing. Debug accesses - the
+     * gdbstub and the monitor - reach this device from the main thread with no
+     * CPU context at all, and the num_cpu > 1 path dereferences current_cpu
+     * unconditionally, so a debugger read of GICD_ISENABLERn on a multi-CPU
+     * machine segfaults (measured: gdbstub `m10211100,4` -> SIGSEGV at
+     * gic_get_current_cpu, current_cpu == NULL). Single-CPU machines never hit
+     * it, which is why this only appeared once the MT6589 machine became
+     * quad-core.
+     *
+     * Answering as CPU 0 is the same thing the single-CPU path does and is what
+     * a debug read of a per-CPU view of the distributor should report.
+     */
+    if (!qtest_enabled() && s->num_cpu > 1 && current_cpu) {
         return current_cpu->cpu_index - s->first_cpu_index;
     }
     return 0;
@@ -436,9 +449,21 @@ static uint16_t gic_get_current_pending_irq(GICState *s, int cpu,
             /* Group0 interrupts hidden from Non-secure access */
             return 1023;
         }
-        if (group == 1 && secure && !(s->cpu_ctlr[cpu] & GICC_CTLR_ACK_CTL)) {
+        if (group == 1 && secure && !(s->cpu_ctlr[cpu] & GICC_CTLR_ACK_CTL)
+            && s->security_extn) {
             /* Group1 interrupts only seen by Secure access if
              * AckCtl bit set.
+             *
+             * The s->security_extn guard is this tree's addition. A GIC that
+             * reports no security extensions should not hide anything by group,
+             * but QEMU models groups for every GICv2 - and MT6589 guests program
+             * their interrupts into group 1 (GICD_IGROUPR = 0xff for IRQ 145)
+             * because the real part does have the extensions. On a machine that
+             * boots in secure state with no secure firmware - like this one -
+             * that combination made gic_get_current_pending_irq() answer 1022
+             * for every interrupt: pending and enabled, never dispatched, so the
+             * timer's status was never acknowledged and calibrate_delay() never
+             * saw a jiffy.
              */
             return 1022;
         }
@@ -1644,6 +1669,32 @@ static MemTxResult gic_cpu_read(GICState *s, int cpu, int offset,
     case 0x0c: /* Acknowledge */
         *data = gic_acknowledge_irq(s, cpu, attrs);
         break;
+    /*
+     * MT6589's GIC has the v1-style aliased acknowledge/EOI pair, and the kernel
+     * uses it whenever CONFIG_FIQ is set:
+     *
+     *     mediatek/.../include/mach/entry-macro.S:
+     *     #ifdef CONFIG_FIQ
+     *         ldr \irqstat, [\base, #GIC_CPU_AIAR]
+     *     #else
+     *         ldr \irqstat, [\base, #GIC_CPU_INTACK]
+     *     #endif
+     *
+     * with GIC_CPU_AIAR = 0x20 and GIC_CPU_AEOI = 0x24 in the kernel's gic.h
+     * (0x0c/0x10 are INTACK/EOI). Neither offset was implemented here, so the
+     * read returned 0 - and 0 is not "no interrupt" to this kernel:
+     * get_irqnr_and_base only accepts >= 27 (or FIQ_DBG_SGI) as a real IRQ, and
+     * test_for_ipi then sees the same 0, decides it is IPI 0 and calls do_IPI(0).
+     * Measured: do_IPI entered with r2 == 0 and "CPU0: Unknown IPI message 0x0"
+     * printed for every interrupt, while the real interrupt was never
+     * acknowledged - so its level stayed asserted and the storm never ended.
+     */
+    case 0x20: /* Aliased Acknowledge */
+        *data = gic_acknowledge_irq(s, cpu, attrs);
+        break;
+    case 0x24: /* Aliased End Of Interrupt (write-only) */
+        *data = 0;
+        break;
     case 0x14: /* Running Priority */
         *data = gic_get_running_priority(s, cpu, attrs);
         break;
@@ -1739,6 +1790,9 @@ static MemTxResult gic_cpu_write(GICState *s, int cpu, int offset,
         }
         break;
     case 0x10: /* End Of Interrupt */
+        gic_complete_irq(s, cpu, value & 0x3ff, attrs);
+        return MEMTX_OK;
+    case 0x24: /* Aliased End Of Interrupt - see the AIAR note in gic_cpu_read */
         gic_complete_irq(s, cpu, value & 0x3ff, attrs);
         return MEMTX_OK;
     case 0x1c: /* Aliased Binary Point */

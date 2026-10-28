@@ -1,3 +1,4 @@
+system_ss.add(when: 'CONFIG_MT6589_DISP', if_true: files('mt6589_disp.c'))
 hw_display_modules = {}
 
 system_ss.add(when: 'CONFIG_DDC', if_true: files('i2c-ddc.c'))

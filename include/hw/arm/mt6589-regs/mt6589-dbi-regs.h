@@ -1,0 +1,869 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/*
+ * dbi - generated from the MT6589 datasheet by
+ * mt6589-emulator/tools/gen_regs_header.py.  DO NOT EDIT.
+ *
+ * page 0x1400c000, 100 registers.
+ *
+ * Extract this page with tools/extract_all_regs.py, which is the
+ * only pipeline that sees every register: it ignores the
+ * datasheet's unreliable module headings and groups by address.
+ */
+#ifndef HW_ARM_DBI_REGS_H
+#define HW_ARM_DBI_REGS_H
+
+#define MT6589_DBI_BASE 0x1400c000u
+
+/* 0x0000  DBI_STA - DBI interface status register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_STA 0x1400c000u
+#define MT6589_DBI_DBI_STA_RESET 0x00000000u
+
+/* 0x0004  DBI_INTEN - DBI Interface Interrupt Enable Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_INTEN 0x1400c004u
+#define MT6589_DBI_DBI_INTEN_RESET 0x00000000u
+#define MT6589_DBI_DBI_INTEN_SYNC_SHIFT 3
+#define MT6589_DBI_DBI_INTEN_SYNC_MASK  0x00000008u
+#define MT6589_DBI_DBI_INTEN_HTT_SHIFT 2
+#define MT6589_DBI_DBI_INTEN_HTT_MASK  0x00000004u
+#define MT6589_DBI_DBI_INTEN_CMDQ_SHIFT 1
+#define MT6589_DBI_DBI_INTEN_CMDQ_MASK  0x00000002u
+
+/* 0x0008  DBI_INTSTA - DBI Interface Interrupt Status Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_INTSTA 0x1400c008u
+#define MT6589_DBI_DBI_INTSTA_RESET 0x00000000u
+#define MT6589_DBI_DBI_INTSTA_SYNC_SHIFT 3
+#define MT6589_DBI_DBI_INTSTA_SYNC_MASK  0x00000008u
+#define MT6589_DBI_DBI_INTSTA_HTT_SHIFT 2
+#define MT6589_DBI_DBI_INTSTA_HTT_MASK  0x00000004u
+#define MT6589_DBI_DBI_INTSTA_CMDQ_SHIFT 1
+#define MT6589_DBI_DBI_INTSTA_CMDQ_MASK  0x00000002u
+#define MT6589_DBI_DBI_INTSTA_CPL_SHIFT 0
+#define MT6589_DBI_DBI_INTSTA_CPL_MASK  0x00000001u
+
+/* 0x000c  DBI_START - DBI Interface Frame Transfer Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_START 0x1400c00cu
+#define MT6589_DBI_DBI_START_RESET 0x00000000u
+#define MT6589_DBI_DBI_START_STAR_SHIFT 15
+#define MT6589_DBI_DBI_START_STAR_MASK  0x00008000u
+#define MT6589_DBI_DBI_START_SRST_SHIFT 0
+#define MT6589_DBI_DBI_START_SRST_MASK  0x00000001u
+
+/* 0x0010  DBI_RSTB - DBI Parallel/Serial Interface Reset Register  [reset 0x00000001u] */
+#define MT6589_DBI_DBI_RSTB 0x1400c010u
+#define MT6589_DBI_DBI_RSTB_RESET 0x00000001u
+#define MT6589_DBI_DBI_RSTB_RSTBM_SHIFT 15
+#define MT6589_DBI_DBI_RSTB_RSTBM_MASK  0x00008000u
+#define MT6589_DBI_DBI_RSTB_E_SHIFT 14
+#define MT6589_DBI_DBI_RSTB_E_MASK  0x00004000u
+#define MT6589_DBI_DBI_RSTB_D_SHIFT 13
+#define MT6589_DBI_DBI_RSTB_D_MASK  0x00002000u
+#define MT6589_DBI_DBI_RSTB_I_SHIFT 12
+#define MT6589_DBI_DBI_RSTB_I_MASK  0x00001000u
+#define MT6589_DBI_DBI_RSTB_A_SHIFT 11
+#define MT6589_DBI_DBI_RSTB_A_MASK  0x00000800u
+#define MT6589_DBI_DBI_RSTB_T_SHIFT 10
+#define MT6589_DBI_DBI_RSTB_T_MASK  0x00000400u
+#define MT6589_DBI_DBI_RSTB_E_SHIFT 9
+#define MT6589_DBI_DBI_RSTB_E_MASK  0x00000200u
+#define MT6589_DBI_DBI_RSTB_K_SHIFT 0
+#define MT6589_DBI_DBI_RSTB_K_MASK  0x000001ffu
+
+/* 0x001c  DBI_SIF_TIMING0 - DBI Serial Interface 0 Timing Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SIF_TIMING0 0x1400c01cu
+#define MT6589_DBI_DBI_SIF_TIMING0_RESET 0x00000000u
+#define MT6589_DBI_DBI_SIF_TIMING0_CSS_SHIFT 20
+#define MT6589_DBI_DBI_SIF_TIMING0_CSS_MASK  0x00f00000u
+#define MT6589_DBI_DBI_SIF_TIMING0_CSH_SHIFT 16
+#define MT6589_DBI_DBI_SIF_TIMING0_CSH_MASK  0x000f0000u
+#define MT6589_DBI_DBI_SIF_TIMING0_RD1ST_SHIFT 12
+#define MT6589_DBI_DBI_SIF_TIMING0_RD1ST_MASK  0x0000f000u
+#define MT6589_DBI_DBI_SIF_TIMING0_RD2ND_SHIFT 8
+#define MT6589_DBI_DBI_SIF_TIMING0_RD2ND_MASK  0x00000f00u
+#define MT6589_DBI_DBI_SIF_TIMING0_WR1ST_SHIFT 4
+#define MT6589_DBI_DBI_SIF_TIMING0_WR1ST_MASK  0x000000f0u
+#define MT6589_DBI_DBI_SIF_TIMING0_WR2ND_SHIFT 0
+#define MT6589_DBI_DBI_SIF_TIMING0_WR2ND_MASK  0x0000000fu
+
+/* 0x0020  DBI_SIF_TIMING1 - DBI Serial Interface 1 Timing Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SIF_TIMING1 0x1400c020u
+#define MT6589_DBI_DBI_SIF_TIMING1_RESET 0x00000000u
+#define MT6589_DBI_DBI_SIF_TIMING1_CSS_SHIFT 20
+#define MT6589_DBI_DBI_SIF_TIMING1_CSS_MASK  0x00f00000u
+#define MT6589_DBI_DBI_SIF_TIMING1_CSH_SHIFT 16
+#define MT6589_DBI_DBI_SIF_TIMING1_CSH_MASK  0x000f0000u
+#define MT6589_DBI_DBI_SIF_TIMING1_RD1ST_SHIFT 12
+#define MT6589_DBI_DBI_SIF_TIMING1_RD1ST_MASK  0x0000f000u
+#define MT6589_DBI_DBI_SIF_TIMING1_RD2ND_SHIFT 8
+#define MT6589_DBI_DBI_SIF_TIMING1_RD2ND_MASK  0x00000f00u
+#define MT6589_DBI_DBI_SIF_TIMING1_WR1ST_SHIFT 4
+#define MT6589_DBI_DBI_SIF_TIMING1_WR1ST_MASK  0x000000f0u
+#define MT6589_DBI_DBI_SIF_TIMING1_WR2ND_SHIFT 0
+#define MT6589_DBI_DBI_SIF_TIMING1_WR2ND_MASK  0x0000000fu
+
+/* 0x0028  DBI_SCNF - DBI Serial Interface Configuration Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SCNF 0x1400c028u
+#define MT6589_DBI_DBI_SCNF_RESET 0x00000000u
+#define MT6589_DBI_DBI_SCNF_SIF_HM_SHIFT 31
+#define MT6589_DBI_DBI_SCNF_SIF_HM_MASK  0x80000000u
+#define MT6589_DBI_DBI_SCNF_E_SHIFT 30
+#define MT6589_DBI_DBI_SCNF_E_MASK  0x40000000u
+#define MT6589_DBI_DBI_SCNF_D_SHIFT 29
+#define MT6589_DBI_DBI_SCNF_D_MASK  0x20000000u
+#define MT6589_DBI_DBI_SCNF_I_SHIFT 28
+#define MT6589_DBI_DBI_SCNF_I_MASK  0x10000000u
+#define MT6589_DBI_DBI_SCNF_A_SHIFT 27
+#define MT6589_DBI_DBI_SCNF_A_MASK  0x08000000u
+#define MT6589_DBI_DBI_SCNF_T_SHIFT 26
+#define MT6589_DBI_DBI_SCNF_T_MASK  0x04000000u
+#define MT6589_DBI_DBI_SCNF_E_SHIFT 25
+#define MT6589_DBI_DBI_SCNF_E_MASK  0x02000000u
+#define MT6589_DBI_DBI_SCNF_K_SHIFT 16
+#define MT6589_DBI_DBI_SCNF_K_MASK  0x01ff0000u
+
+/* 0x002c  DBI_SCNF_CS - DBI Serial Interface Chip Select Register  [reset 0x00000003u] */
+#define MT6589_DBI_DBI_SCNF_CS 0x1400c02cu
+#define MT6589_DBI_DBI_SCNF_CS_RESET 0x00000003u
+#define MT6589_DBI_DBI_SCNF_CS_CS1_SHIFT 1
+#define MT6589_DBI_DBI_SCNF_CS_CS1_MASK  0x00000002u
+#define MT6589_DBI_DBI_SCNF_CS_CS0_SHIFT 0
+#define MT6589_DBI_DBI_SCNF_CS_CS0_MASK  0x00000001u
+
+/* 0x0030  DBI_PCNF0 - DBI Parallel Interface 0 Configuration Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PCNF0 0x1400c030u
+#define MT6589_DBI_DBI_PCNF0_RESET 0x00000000u
+#define MT6589_DBI_DBI_PCNF0_C2RH_SHIFT 28
+#define MT6589_DBI_DBI_PCNF0_C2RH_MASK  0xf0000000u
+#define MT6589_DBI_DBI_PCNF0_C2RS_SHIFT 24
+#define MT6589_DBI_DBI_PCNF0_C2RS_MASK  0x0f000000u
+#define MT6589_DBI_DBI_PCNF0_RLT_SHIFT 16
+#define MT6589_DBI_DBI_PCNF0_RLT_MASK  0x003f0000u
+#define MT6589_DBI_DBI_PCNF0_C2WH_SHIFT 12
+#define MT6589_DBI_DBI_PCNF0_C2WH_MASK  0x0000f000u
+#define MT6589_DBI_DBI_PCNF0_C2WS_SHIFT 8
+#define MT6589_DBI_DBI_PCNF0_C2WS_MASK  0x00000f00u
+#define MT6589_DBI_DBI_PCNF0_WST_SHIFT 0
+#define MT6589_DBI_DBI_PCNF0_WST_MASK  0x0000003fu
+
+/* 0x0034  DBI_PCNF1 - DBI Parallel Interface 1 Configuration Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PCNF1 0x1400c034u
+#define MT6589_DBI_DBI_PCNF1_RESET 0x00000000u
+#define MT6589_DBI_DBI_PCNF1_C2RH_SHIFT 28
+#define MT6589_DBI_DBI_PCNF1_C2RH_MASK  0xf0000000u
+#define MT6589_DBI_DBI_PCNF1_C2RS_SHIFT 24
+#define MT6589_DBI_DBI_PCNF1_C2RS_MASK  0x0f000000u
+#define MT6589_DBI_DBI_PCNF1_RLT_SHIFT 16
+#define MT6589_DBI_DBI_PCNF1_RLT_MASK  0x003f0000u
+#define MT6589_DBI_DBI_PCNF1_C2WH_SHIFT 12
+#define MT6589_DBI_DBI_PCNF1_C2WH_MASK  0x0000f000u
+#define MT6589_DBI_DBI_PCNF1_C2WS_SHIFT 8
+#define MT6589_DBI_DBI_PCNF1_C2WS_MASK  0x00000f00u
+#define MT6589_DBI_DBI_PCNF1_WST_SHIFT 0
+#define MT6589_DBI_DBI_PCNF1_WST_MASK  0x0000003fu
+
+/* 0x0038  DBI_PCNF2 - DBI Parallel Interface 2 Configuration Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PCNF2 0x1400c038u
+#define MT6589_DBI_DBI_PCNF2_RESET 0x00000000u
+#define MT6589_DBI_DBI_PCNF2_C2RH_SHIFT 28
+#define MT6589_DBI_DBI_PCNF2_C2RH_MASK  0xf0000000u
+#define MT6589_DBI_DBI_PCNF2_C2RS_SHIFT 24
+#define MT6589_DBI_DBI_PCNF2_C2RS_MASK  0x0f000000u
+#define MT6589_DBI_DBI_PCNF2_RLT_SHIFT 16
+#define MT6589_DBI_DBI_PCNF2_RLT_MASK  0x003f0000u
+#define MT6589_DBI_DBI_PCNF2_C2WH_SHIFT 12
+#define MT6589_DBI_DBI_PCNF2_C2WH_MASK  0x0000f000u
+#define MT6589_DBI_DBI_PCNF2_C2WS_SHIFT 8
+#define MT6589_DBI_DBI_PCNF2_C2WS_MASK  0x00000f00u
+#define MT6589_DBI_DBI_PCNF2_WST_SHIFT 0
+#define MT6589_DBI_DBI_PCNF2_WST_MASK  0x0000003fu
+
+/* 0x003c  DBI_PDW - DBI Parallel Interface Data Width Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PDW 0x1400c03cu
+#define MT6589_DBI_DBI_PDW_RESET 0x00000000u
+#define MT6589_DBI_DBI_PDW_P2CHW_SHIFT 31
+#define MT6589_DBI_DBI_PDW_P2CHW_MASK  0x80000000u
+#define MT6589_DBI_DBI_PDW_P1CHW_SHIFT 30
+#define MT6589_DBI_DBI_PDW_P1CHW_MASK  0x40000000u
+#define MT6589_DBI_DBI_PDW_P0CHW_SHIFT 16
+#define MT6589_DBI_DBI_PDW_P0CHW_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_PDW_P2DW_SHIFT 15
+#define MT6589_DBI_DBI_PDW_P2DW_MASK  0x00008000u
+#define MT6589_DBI_DBI_PDW_P1DW_SHIFT 14
+#define MT6589_DBI_DBI_PDW_P1DW_MASK  0x00004000u
+#define MT6589_DBI_DBI_PDW_P0DW_SHIFT 0
+#define MT6589_DBI_DBI_PDW_P0DW_MASK  0x00003fffu
+
+/* 0x0040  DBI_TECON - DBI Tearing Control Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_TECON 0x1400c040u
+#define MT6589_DBI_DBI_TECON_RESET 0x00000000u
+#define MT6589_DBI_DBI_TECON_STE_SHIFT 15
+#define MT6589_DBI_DBI_TECON_STE_MASK  0x00008000u
+#define MT6589_DBI_DBI_TECON_SM_SHIFT 2
+#define MT6589_DBI_DBI_TECON_SM_MASK  0x00000004u
+
+/* 0x0044  DBI_CALC_HTT - DBI HTT Calculation Register  [reset 0x00000001u] */
+#define MT6589_DBI_DBI_CALC_HTT 0x1400c044u
+#define MT6589_DBI_DBI_CALC_HTT_RESET 0x00000001u
+#define MT6589_DBI_DBI_CALC_HTT_COUNT_SHIFT 16
+#define MT6589_DBI_DBI_CALC_HTT_COUNT_MASK  0x0fff0000u
+#define MT6589_DBI_DBI_CALC_HTT_TIMEOUT_SHIFT 0
+#define MT6589_DBI_DBI_CALC_HTT_TIMEOUT_MASK  0x00000fffu
+
+/* 0x0048  DBI_SYNC_LCM_SIZE - DBI sync LCM size register Sets yo the current LCM VTT and HTT timing parameters  [reset 0x00010001u] */
+#define MT6589_DBI_DBI_SYNC_LCM_SIZE 0x1400c048u
+#define MT6589_DBI_DBI_SYNC_LCM_SIZE_RESET 0x00010001u
+#define MT6589_DBI_DBI_SYNC_LCM_SIZE_VTT_SHIFT 16
+#define MT6589_DBI_DBI_SYNC_LCM_SIZE_VTT_MASK  0x0fff0000u
+#define MT6589_DBI_DBI_SYNC_LCM_SIZE_HTT_SHIFT 0
+#define MT6589_DBI_DBI_SYNC_LCM_SIZE_HTT_MASK  0x000003ffu
+
+/* 0x004c  DBI_SYNC_CNT - DBI Sync Counter Register  [reset 0x00000001u] */
+#define MT6589_DBI_DBI_SYNC_CNT 0x1400c04cu
+#define MT6589_DBI_DBI_SYNC_CNT_RESET 0x00000001u
+#define MT6589_DBI_DBI_SYNC_CNT_SCANLINE_SHIFT 16
+#define MT6589_DBI_DBI_SYNC_CNT_SCANLINE_MASK  0x0fff0000u
+#define MT6589_DBI_DBI_SYNC_CNT_WAITLINE_SHIFT 0
+#define MT6589_DBI_DBI_SYNC_CNT_WAITLINE_MASK  0x00000fffu
+
+/* 0x0050  DBI_SMICON - DBI SMI Port Control Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SMICON 0x1400c050u
+#define MT6589_DBI_DBI_SMICON_RESET 0x00000000u
+#define MT6589_DBI_DBI_SMICON_TPER_SHIFT 16
+#define MT6589_DBI_DBI_SMICON_TPER_MASK  0xffff0000u
+#define MT6589_DBI_DBI_SMICON_TREN_SHIFT 4
+#define MT6589_DBI_DBI_SMICON_TREN_MASK  0x00000010u
+
+/* 0x0060  DBI_ROICON - DBI Region of Interest Control Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_ROICON 0x1400c060u
+#define MT6589_DBI_DBI_ROICON_RESET 0x00000000u
+#define MT6589_DBI_DBI_ROICON_IF24_SHIFT 31
+#define MT6589_DBI_DBI_ROICON_IF24_MASK  0x80000000u
+#define MT6589_DBI_DBI_ROICON_RSPX_SHIFT 16
+#define MT6589_DBI_DBI_ROICON_RSPX_MASK  0x7fff0000u
+#define MT6589_DBI_DBI_ROICON_ENC_SHIFT 15
+#define MT6589_DBI_DBI_ROICON_ENC_MASK  0x00008000u
+#define MT6589_DBI_DBI_ROICON_CMD_SHIFT 14
+#define MT6589_DBI_DBI_ROICON_CMD_MASK  0x00004000u
+#define MT6589_DBI_DBI_ROICON_FMTM_SHIFT 13
+#define MT6589_DBI_DBI_ROICON_FMTM_MASK  0x00002000u
+#define MT6589_DBI_DBI_ROICON_E_SHIFT 12
+#define MT6589_DBI_DBI_ROICON_E_MASK  0x00001000u
+#define MT6589_DBI_DBI_ROICON_D_SHIFT 11
+#define MT6589_DBI_DBI_ROICON_D_MASK  0x00000800u
+#define MT6589_DBI_DBI_ROICON_I_SHIFT 10
+#define MT6589_DBI_DBI_ROICON_I_MASK  0x00000400u
+#define MT6589_DBI_DBI_ROICON_A_SHIFT 9
+#define MT6589_DBI_DBI_ROICON_A_MASK  0x00000200u
+#define MT6589_DBI_DBI_ROICON_T_SHIFT 8
+#define MT6589_DBI_DBI_ROICON_T_MASK  0x00000100u
+#define MT6589_DBI_DBI_ROICON_E_SHIFT 7
+#define MT6589_DBI_DBI_ROICON_E_MASK  0x00000080u
+#define MT6589_DBI_DBI_ROICON_K_SHIFT 0
+#define MT6589_DBI_DBI_ROICON_K_MASK  0x0000007fu
+
+/* 0x0064  DBI_ROI_CADD - DBI Region of Interest Command Address Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_ROI_CADD 0x1400c064u
+#define MT6589_DBI_DBI_ROI_CADD_RESET 0x00000000u
+#define MT6589_DBI_DBI_ROI_CADD_ADDR_SHIFT 0
+#define MT6589_DBI_DBI_ROI_CADD_ADDR_MASK  0x0000ffffu
+
+/* 0x0068  DBI_ROI_DADD - DBI region of interest data address register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_ROI_DADD 0x1400c068u
+#define MT6589_DBI_DBI_ROI_DADD_RESET 0x00000000u
+#define MT6589_DBI_DBI_ROI_DADD_ADDR_SHIFT 0
+#define MT6589_DBI_DBI_ROI_DADD_ADDR_MASK  0x0000ffffu
+
+/* 0x006c  DBI_ROI_SIZE - DBI Region of Interest Size Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_ROI_SIZE 0x1400c06cu
+#define MT6589_DBI_DBI_ROI_SIZE_RESET 0x00000000u
+#define MT6589_DBI_DBI_ROI_SIZE_ROW_SHIFT 16
+#define MT6589_DBI_DBI_ROI_SIZE_ROW_MASK  0x07ff0000u
+#define MT6589_DBI_DBI_ROI_SIZE_COL_SHIFT 0
+#define MT6589_DBI_DBI_ROI_SIZE_COL_MASK  0x000007ffu
+
+/* 0x0070  DBI_SRC_CON - Source Control Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SRC_CON 0x1400c070u
+#define MT6589_DBI_DBI_SRC_CON_RESET 0x00000000u
+#define MT6589_DBI_DBI_SRC_CON_CSWP_SHIFT 26
+#define MT6589_DBI_DBI_SRC_CON_CSWP_MASK  0x04000000u
+#define MT6589_DBI_DBI_SRC_CON_CFMT_SHIFT 20
+#define MT6589_DBI_DBI_SRC_CON_CFMT_MASK  0x00700000u
+#define MT6589_DBI_DBI_SRC_CON_MEMORY_MOD_SHIFT 19
+#define MT6589_DBI_DBI_SRC_CON_MEMORY_MOD_MASK  0x00080000u
+
+/* 0x0074  DBI_SRC_ADD - Source Start Address Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SRC_ADD 0x1400c074u
+#define MT6589_DBI_DBI_SRC_ADD_RESET 0x00000000u
+#define MT6589_DBI_DBI_SRC_ADD_ADDR_31_16__SHIFT 16
+#define MT6589_DBI_DBI_SRC_ADD_ADDR_31_16__MASK  0xffff0000u
+#define MT6589_DBI_DBI_SRC_ADD_ADDR_15_0__SHIFT 0
+#define MT6589_DBI_DBI_SRC_ADD_ADDR_15_0__MASK  0x0000ffffu
+
+/* 0x0078  DBI_SRC_PITCH - Source Memory Pitch Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SRC_PITCH 0x1400c078u
+#define MT6589_DBI_DBI_SRC_PITCH_RESET 0x00000000u
+#define MT6589_DBI_DBI_SRC_PITCH_PITH_SHIFT 0
+#define MT6589_DBI_DBI_SRC_PITCH_PITH_MASK  0x0000ffffu
+
+/* 0x0090  DBI_ULTRA_CON - DBI ultra high control  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_ULTRA_CON 0x1400c090u
+#define MT6589_DBI_DBI_ULTRA_CON_RESET 0x00000000u
+#define MT6589_DBI_DBI_ULTRA_CON_GMC_ULTRA_E_SHIFT 1
+#define MT6589_DBI_DBI_ULTRA_CON_GMC_ULTRA_E_MASK  0x00000002u
+
+/* 0x0094  DBI_CONSUME_RATE - DBI consume pixel rate  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_CONSUME_RATE 0x1400c094u
+#define MT6589_DBI_DBI_CONSUME_RATE_RESET 0x00000000u
+#define MT6589_DBI_DBI_CONSUME_RATE_CONSUME_PXLSRW_SHIFT 0
+#define MT6589_DBI_DBI_CONSUME_RATE_CONSUME_PXLSRW_MASK  0x0000ffffu
+
+/* 0x0098  DBI_DBI_ULTRA_TH - DBI I/F ultra high threshold  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DBI_ULTRA_TH 0x1400c098u
+#define MT6589_DBI_DBI_DBI_ULTRA_TH_RESET 0x00000000u
+#define MT6589_DBI_DBI_DBI_ULTRA_TH_DBI_TH_HIGH_SHIFT 16
+#define MT6589_DBI_DBI_DBI_ULTRA_TH_DBI_TH_HIGH_MASK  0xffff0000u
+#define MT6589_DBI_DBI_DBI_ULTRA_TH_DBI_TH_LOW_SHIFT 0
+#define MT6589_DBI_DBI_DBI_ULTRA_TH_DBI_TH_LOW_MASK  0x0000ffffu
+
+/* 0x009c  DBI_GMC_ULTRA_TH0 - DBI GMC ultra high threshold setting 0  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_GMC_ULTRA_TH0 0x1400c09cu
+#define MT6589_DBI_DBI_GMC_ULTRA_TH0_RESET 0x00000000u
+#define MT6589_DBI_DBI_GMC_ULTRA_TH0_GMC_TH_PRE_LOW_OFST_SHIFT 16
+#define MT6589_DBI_DBI_GMC_ULTRA_TH0_GMC_TH_PRE_LOW_OFST_MASK  0xffff0000u
+#define MT6589_DBI_DBI_GMC_ULTRA_TH0_GMC_TH_LOW_SHIFT 0
+#define MT6589_DBI_DBI_GMC_ULTRA_TH0_GMC_TH_LOW_MASK  0x0000ffffu
+
+/* 0x00a0  DBI_GMC_ULTRA_TH1 - DBI GMC ultra high threshold setting 1  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_GMC_ULTRA_TH1 0x1400c0a0u
+#define MT6589_DBI_DBI_GMC_ULTRA_TH1_RESET 0x00000000u
+
+/* 0x00a4  DBI_DB_RDMA - RDMA Pixel Debug Register  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DB_RDMA 0x1400c0a4u
+#define MT6589_DBI_DBI_DB_RDMA_RESET 0x00000000u
+#define MT6589_DBI_DBI_DB_RDMA_YOFF_SHIFT 16
+#define MT6589_DBI_DBI_DB_RDMA_YOFF_MASK  0x07ff0000u
+#define MT6589_DBI_DBI_DB_RDMA_XOFF_SHIFT 0
+#define MT6589_DBI_DBI_DB_RDMA_XOFF_MASK  0x000007ffu
+
+/* 0x00a8  DBI_DB_LCM - LCM Pixel Debug Register  [reset 0x00010001u] */
+#define MT6589_DBI_DBI_DB_LCM 0x1400c0a8u
+#define MT6589_DBI_DBI_DB_LCM_RESET 0x00010001u
+#define MT6589_DBI_DBI_DB_LCM_YOFF_SHIFT 16
+#define MT6589_DBI_DBI_DB_LCM_YOFF_MASK  0x07ff0000u
+#define MT6589_DBI_DBI_DB_LCM_XOFF_SHIFT 0
+#define MT6589_DBI_DBI_DB_LCM_XOFF_MASK  0x000007ffu
+
+/* 0x00b0  DBI_C00 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_C00 0x1400c0b0u
+#define MT6589_DBI_DBI_C00_RESET 0x00000000u
+#define MT6589_DBI_DBI_C00_C01_SHIFT 16
+#define MT6589_DBI_DBI_C00_C01_MASK  0x1fff0000u
+#define MT6589_DBI_DBI_C00_C00_SHIFT 0
+#define MT6589_DBI_DBI_C00_C00_MASK  0x00001fffu
+
+/* 0x00b4  DBI_C02 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_C02 0x1400c0b4u
+#define MT6589_DBI_DBI_C02_RESET 0x00000000u
+#define MT6589_DBI_DBI_C02_C02_SHIFT 0
+#define MT6589_DBI_DBI_C02_C02_MASK  0x00001fffu
+
+/* 0x00b8  DBI_C10 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_C10 0x1400c0b8u
+#define MT6589_DBI_DBI_C10_RESET 0x00000000u
+#define MT6589_DBI_DBI_C10_C11_SHIFT 16
+#define MT6589_DBI_DBI_C10_C11_MASK  0x1fff0000u
+#define MT6589_DBI_DBI_C10_C10_SHIFT 0
+#define MT6589_DBI_DBI_C10_C10_MASK  0x00001fffu
+
+/* 0x00bc  DBI_C12 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_C12 0x1400c0bcu
+#define MT6589_DBI_DBI_C12_RESET 0x00000000u
+
+/* 0x00c0  DBI_C20 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_C20 0x1400c0c0u
+#define MT6589_DBI_DBI_C20_RESET 0x00000000u
+#define MT6589_DBI_DBI_C20_C21_SHIFT 16
+#define MT6589_DBI_DBI_C20_C21_MASK  0x1fff0000u
+#define MT6589_DBI_DBI_C20_C20_SHIFT 0
+#define MT6589_DBI_DBI_C20_C20_MASK  0x00001fffu
+
+/* 0x00c4  DBI_C22 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_C22 0x1400c0c4u
+#define MT6589_DBI_DBI_C22_RESET 0x00000000u
+#define MT6589_DBI_DBI_C22_C22_SHIFT 0
+#define MT6589_DBI_DBI_C22_C22_MASK  0x00001fffu
+
+/* 0x00c8  DBI_PRE_ADD0 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PRE_ADD0 0x1400c0c8u
+#define MT6589_DBI_DBI_PRE_ADD0_RESET 0x00000000u
+#define MT6589_DBI_DBI_PRE_ADD0_SIGNED_1_SHIFT 31
+#define MT6589_DBI_DBI_PRE_ADD0_SIGNED_1_MASK  0x80000000u
+
+/* 0x00cc  DBI_PRE_ADD2 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PRE_ADD2 0x1400c0ccu
+#define MT6589_DBI_DBI_PRE_ADD2_RESET 0x00000000u
+#define MT6589_DBI_DBI_PRE_ADD2_SIGNED_2_SHIFT 15
+#define MT6589_DBI_DBI_PRE_ADD2_SIGNED_2_MASK  0x00008000u
+#define MT6589_DBI_DBI_PRE_ADD2_PRE_ADD_2_SHIFT 0
+#define MT6589_DBI_DBI_PRE_ADD2_PRE_ADD_2_MASK  0x000001ffu
+
+/* 0x00d0  DBI_POST_ADD0 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_POST_ADD0 0x1400c0d0u
+#define MT6589_DBI_DBI_POST_ADD0_RESET 0x00000000u
+#define MT6589_DBI_DBI_POST_ADD0_POST_ADD_1_SHIFT 16
+#define MT6589_DBI_DBI_POST_ADD0_POST_ADD_1_MASK  0x01ff0000u
+#define MT6589_DBI_DBI_POST_ADD0_POST_ADD_0_SHIFT 0
+#define MT6589_DBI_DBI_POST_ADD0_POST_ADD_0_MASK  0x000001ffu
+
+/* 0x00d4  DBI_POST_ADD2 - DBI matrix coefficient  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_POST_ADD2 0x1400c0d4u
+#define MT6589_DBI_DBI_POST_ADD2_RESET 0x00000000u
+#define MT6589_DBI_DBI_POST_ADD2_POST_ADD_2_SHIFT 0
+#define MT6589_DBI_DBI_POST_ADD2_POST_ADD_2_MASK  0x000001ffu
+
+/* 0x00e0  DBI_SERIAL_CHKSUM - DBI serial checksum DBI checksum enable  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SERIAL_CHKSUM 0x1400c0e0u
+#define MT6589_DBI_DBI_SERIAL_CHKSUM_RESET 0x00000000u
+#define MT6589_DBI_DBI_SERIAL_CHKSUM_CHKSUM_EN_SHIFT 31
+#define MT6589_DBI_DBI_SERIAL_CHKSUM_CHKSUM_EN_MASK  0x80000000u
+#define MT6589_DBI_DBI_SERIAL_CHKSUM_S_CHKSUM_SHIFT 0
+#define MT6589_DBI_DBI_SERIAL_CHKSUM_S_CHKSUM_MASK  0x00ffffffu
+
+/* 0x00e4  DBI_PARALLEL_CHKSUM - DBI parallel checksum DBI parallel checksum  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PARALLEL_CHKSUM 0x1400c0e4u
+#define MT6589_DBI_DBI_PARALLEL_CHKSUM_RESET 0x00000000u
+#define MT6589_DBI_DBI_PARALLEL_CHKSUM_P_CHKSUM_23_16__SHIFT 16
+#define MT6589_DBI_DBI_PARALLEL_CHKSUM_P_CHKSUM_23_16__MASK  0xffff0000u
+#define MT6589_DBI_DBI_PARALLEL_CHKSUM_P_CHKSUM_15_0__SHIFT 0
+#define MT6589_DBI_DBI_PARALLEL_CHKSUM_P_CHKSUM_15_0__MASK  0x0000ffffu
+
+/* 0x0c00  DBI_COMD0 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned.  [reset 0x1400cc7cu] */
+#define MT6589_DBI_DBI_COMD0 0x1400cc00u
+#define MT6589_DBI_DBI_COMD0_RESET 0x1400cc7cu
+
+/* 0x0c04  DBI_COMD1 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD1 0x1400cc04u
+#define MT6589_DBI_DBI_COMD1_RESET 0x00000000u
+
+/* 0x0c08  DBI_COMD2 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD2 0x1400cc08u
+#define MT6589_DBI_DBI_COMD2_RESET 0x00000000u
+
+/* 0x0c0c  DBI_COMD3 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD3 0x1400cc0cu
+#define MT6589_DBI_DBI_COMD3_RESET 0x00000000u
+
+/* 0x0c10  DBI_COMD4 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD4 0x1400cc10u
+#define MT6589_DBI_DBI_COMD4_RESET 0x00000000u
+
+/* 0x0c14  DBI_COMD5 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD5 0x1400cc14u
+#define MT6589_DBI_DBI_COMD5_RESET 0x00000000u
+
+/* 0x0c18  DBI_COMD6 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD6 0x1400cc18u
+#define MT6589_DBI_DBI_COMD6_RESET 0x00000000u
+
+/* 0x0c1c  DBI_COMD7 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD7 0x1400cc1cu
+#define MT6589_DBI_DBI_COMD7_RESET 0x00000000u
+
+/* 0x0c20  DBI_COMD8 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD8 0x1400cc20u
+#define MT6589_DBI_DBI_COMD8_RESET 0x00000000u
+
+/* 0x0c24  DBI_COMD9 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD9 0x1400cc24u
+#define MT6589_DBI_DBI_COMD9_RESET 0x00000000u
+
+/* 0x0c28  DBI_COMD10 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD10 0x1400cc28u
+#define MT6589_DBI_DBI_COMD10_RESET 0x00000000u
+
+/* 0x0c2c  DBI_COMD11 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD11 0x1400cc2cu
+#define MT6589_DBI_DBI_COMD11_RESET 0x00000000u
+
+/* 0x0c30  DBI_COMD12 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD12 0x1400cc30u
+#define MT6589_DBI_DBI_COMD12_RESET 0x00000000u
+
+/* 0x0c34  DBI_COMD13 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD13 0x1400cc34u
+#define MT6589_DBI_DBI_COMD13_RESET 0x00000000u
+
+/* 0x0c38  DBI_COMD14 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD14 0x1400cc38u
+#define MT6589_DBI_DBI_COMD14_RESET 0x00000000u
+
+/* 0x0c3c  DBI_COMD15 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD15 0x1400cc3cu
+#define MT6589_DBI_DBI_COMD15_RESET 0x00000000u
+
+/* 0x0c40  DBI_COMD16 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD16 0x1400cc40u
+#define MT6589_DBI_DBI_COMD16_RESET 0x00000000u
+
+/* 0x0c44  DBI_COMD17 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD17 0x1400cc44u
+#define MT6589_DBI_DBI_COMD17_RESET 0x00000000u
+
+/* 0x0c48  DBI_COMD18 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD18 0x1400cc48u
+#define MT6589_DBI_DBI_COMD18_RESET 0x00000000u
+
+/* 0x0c4c  DBI_COMD19 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD19 0x1400cc4cu
+#define MT6589_DBI_DBI_COMD19_RESET 0x00000000u
+
+/* 0x0c50  DBI_COMD20 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD20 0x1400cc50u
+#define MT6589_DBI_DBI_COMD20_RESET 0x00000000u
+
+/* 0x0c54  DBI_COMD21 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD21 0x1400cc54u
+#define MT6589_DBI_DBI_COMD21_RESET 0x00000000u
+
+/* 0x0c58  DBI_COMD22 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD22 0x1400cc58u
+#define MT6589_DBI_DBI_COMD22_RESET 0x00000000u
+
+/* 0x0c5c  DBI_COMD23 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD23 0x1400cc5cu
+#define MT6589_DBI_DBI_COMD23_RESET 0x00000000u
+
+/* 0x0c60  DBI_COMD24 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD24 0x1400cc60u
+#define MT6589_DBI_DBI_COMD24_RESET 0x00000000u
+
+/* 0x0c64  DBI_COMD25 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD25 0x1400cc64u
+#define MT6589_DBI_DBI_COMD25_RESET 0x00000000u
+
+/* 0x0c68  DBI_COMD26 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD26 0x1400cc68u
+#define MT6589_DBI_DBI_COMD26_RESET 0x00000000u
+
+/* 0x0c6c  DBI_COMD27 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD27 0x1400cc6cu
+#define MT6589_DBI_DBI_COMD27_RESET 0x00000000u
+
+/* 0x0c70  DBI_COMD28 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD28 0x1400cc70u
+#define MT6589_DBI_DBI_COMD28_RESET 0x00000000u
+
+/* 0x0c74  DBI_COMD29 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD29 0x1400cc74u
+#define MT6589_DBI_DBI_COMD29_RESET 0x00000000u
+
+/* 0x0c78  DBI_COMD30 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned. */
+#define MT6589_DBI_DBI_COMD30 0x1400cc78u
+#define MT6589_DBI_DBI_COMD30_RESET 0x00000000u
+
+/* 0x0c7c  DBI_COMD31 - DBI command/parameter table This is command queue and is comprised of a group of registers from offset C00 to C7F. Each command is at a 4-byte aligned position. Read/Write should be 4-byte aligned.  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_COMD31 0x1400cc7cu
+#define MT6589_DBI_DBI_COMD31_RESET 0x00000000u
+
+/* 0x0e00  DBI_DITHER_0 - DBI dither setting 0  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_0 0x1400ce00u
+#define MT6589_DBI_DBI_DITHER_0_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_0_CRC_CLR_SHIFT 24
+#define MT6589_DBI_DBI_DITHER_0_CRC_CLR_MASK  0x01000000u
+#define MT6589_DBI_DBI_DITHER_0_CRC_START_SHIFT 20
+#define MT6589_DBI_DBI_DITHER_0_CRC_START_MASK  0x00100000u
+#define MT6589_DBI_DBI_DITHER_0_FRAME_DONE_DEL_SHIFT 8
+#define MT6589_DBI_DBI_DITHER_0_FRAME_DONE_DEL_MASK  0x0000ff00u
+
+/* 0x0e14  DBI_DITHER_5 - DBI dither setting 5  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_5 0x1400ce14u
+#define MT6589_DBI_DBI_DITHER_5_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_5_W_DEMO_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_5_W_DEMO_MASK  0x0000ffffu
+
+/* 0x0e18  DBI_DITHER_6 - DBI dither setting 6  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_6 0x1400ce18u
+#define MT6589_DBI_DBI_DITHER_6_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_6_LEFT_ENFPHASE_RFPHASE_ENFPHASEROUND_ENRDITHER_ENLFSR_ENEDITHER_EN_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_6_LEFT_ENFPHASE_RFPHASE_ENFPHASEROUND_ENRDITHER_ENLFSR_ENEDITHER_EN_MASK  0x0000ffffu
+
+/* 0x0e1c  DBI_DITHER_7 - DBI dither setting 7  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_7 0x1400ce1cu
+#define MT6589_DBI_DBI_DITHER_7_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_7_DRMOD_B_SHIFT 8
+#define MT6589_DBI_DBI_DITHER_7_DRMOD_B_MASK  0x00000300u
+#define MT6589_DBI_DBI_DITHER_7_DRMOD_G_SHIFT 4
+#define MT6589_DBI_DBI_DITHER_7_DRMOD_G_MASK  0x00000030u
+#define MT6589_DBI_DBI_DITHER_7_DRMOD_R_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_7_DRMOD_R_MASK  0x00000003u
+
+/* 0x0e20  DBI_DITHER_8 - DBI dither setting 8  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_8 0x1400ce20u
+#define MT6589_DBI_DBI_DITHER_8_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_8_INK_DATA_R_SHIFT 16
+#define MT6589_DBI_DBI_DITHER_8_INK_DATA_R_MASK  0x0fff0000u
+#define MT6589_DBI_DBI_DITHER_8_INK_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_8_INK_MASK  0x00000001u
+
+/* 0x0e24  DBI_DITHER_9 - DBI dither setting 9  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_9 0x1400ce24u
+#define MT6589_DBI_DBI_DITHER_9_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_9_INK_DATA_B_SHIFT 16
+#define MT6589_DBI_DBI_DITHER_9_INK_DATA_B_MASK  0x0fff0000u
+#define MT6589_DBI_DBI_DITHER_9_INK_DATA_G_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_9_INK_DATA_G_MASK  0x00000fffu
+
+/* 0x0e28  DBI_DITHER_10 - DBI dither setting 10  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_10 0x1400ce28u
+#define MT6589_DBI_DBI_DITHER_10_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_10_FPHASE_BIT_SHIFT 15
+#define MT6589_DBI_DBI_DITHER_10_FPHASE_BIT_MASK  0x00008000u
+#define MT6589_DBI_DBI_DITHER_10_FPHASE_SEL_SHIFT 14
+#define MT6589_DBI_DBI_DITHER_10_FPHASE_SEL_MASK  0x00004000u
+#define MT6589_DBI_DBI_DITHER_10_FPHASE_CTRL_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_10_FPHASE_CTRL_MASK  0x00003fffu
+
+/* 0x0e2c  DBI_DITHER_11 - DBI dither setting 11  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_11 0x1400ce2cu
+#define MT6589_DBI_DBI_DITHER_11_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_11_SUB_B_SHIFT 12
+#define MT6589_DBI_DBI_DITHER_11_SUB_B_MASK  0x00003000u
+#define MT6589_DBI_DBI_DITHER_11_SUB_G_SHIFT 8
+#define MT6589_DBI_DBI_DITHER_11_SUB_G_MASK  0x00000300u
+#define MT6589_DBI_DBI_DITHER_11_SUB_R_SHIFT 4
+#define MT6589_DBI_DBI_DITHER_11_SUB_R_MASK  0x00000030u
+#define MT6589_DBI_DBI_DITHER_11_SUBPIX_EN_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_11_SUBPIX_EN_MASK  0x00000001u
+
+/* 0x0e30  DBI_DITHER_12 - DBI dither setting 12  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_12 0x1400ce30u
+#define MT6589_DBI_DBI_DITHER_12_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_12_H_ACTIVE_SHIFT 16
+#define MT6589_DBI_DBI_DITHER_12_H_ACTIVE_MASK  0xffff0000u
+#define MT6589_DBI_DBI_DITHER_12_TABLE_EN_SHIFT 4
+#define MT6589_DBI_DBI_DITHER_12_TABLE_EN_MASK  0x00000030u
+#define MT6589_DBI_DBI_DITHER_12_LSB_OFF_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_12_LSB_OFF_MASK  0x00000001u
+
+/* 0x0e34  DBI_DITHER_13 - DBI dither setting 13  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_13 0x1400ce34u
+#define MT6589_DBI_DBI_DITHER_13_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_13_RSHIFT_B_SHIFT 8
+#define MT6589_DBI_DBI_DITHER_13_RSHIFT_B_MASK  0x00000700u
+#define MT6589_DBI_DBI_DITHER_13_RSHIFT_G_SHIFT 4
+#define MT6589_DBI_DBI_DITHER_13_RSHIFT_G_MASK  0x00000070u
+#define MT6589_DBI_DBI_DITHER_13_RSHIFT_R_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_13_RSHIFT_R_MASK  0x00000007u
+
+/* 0x0e38  DBI_DITHER_14 - DBI dither setting 14  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_14 0x1400ce38u
+#define MT6589_DBI_DBI_DITHER_14_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_14_DEBUG_MODE_SHIFT 8
+#define MT6589_DBI_DBI_DITHER_14_DEBUG_MODE_MASK  0x00000300u
+#define MT6589_DBI_DBI_DITHER_14_DIFF_SHIFT_SHIFT 4
+#define MT6589_DBI_DBI_DITHER_14_DIFF_SHIFT_MASK  0x00000070u
+#define MT6589_DBI_DBI_DITHER_14_TESTPIN_EN_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_14_TESTPIN_EN_MASK  0x00000001u
+
+/* 0x0e3c  DBI_DITHER_15 - DBI dither setting 15  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_15 0x1400ce3cu
+#define MT6589_DBI_DBI_DITHER_15_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_15_LSB_ERR_SHIFT_R_SHIFT 28
+#define MT6589_DBI_DBI_DITHER_15_LSB_ERR_SHIFT_R_MASK  0x70000000u
+#define MT6589_DBI_DBI_DITHER_15_OVFLW_BIT_R_SHIFT 24
+#define MT6589_DBI_DBI_DITHER_15_OVFLW_BIT_R_MASK  0x07000000u
+#define MT6589_DBI_DBI_DITHER_15_ADD_LSHIFT_R_SHIFT 20
+#define MT6589_DBI_DBI_DITHER_15_ADD_LSHIFT_R_MASK  0x00700000u
+#define MT6589_DBI_DBI_DITHER_15_INPUT_RSHIFT_R_SHIFT 16
+#define MT6589_DBI_DBI_DITHER_15_INPUT_RSHIFT_R_MASK  0x00070000u
+
+/* 0x0e40  DBI_DITHER_16 - DBI dither setting 16  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_16 0x1400ce40u
+#define MT6589_DBI_DBI_DITHER_16_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_16_LSB_ERR_SHIFT_B_SHIFT 28
+#define MT6589_DBI_DBI_DITHER_16_LSB_ERR_SHIFT_B_MASK  0x70000000u
+#define MT6589_DBI_DBI_DITHER_16_OVFLW_BIT_B_SHIFT 24
+#define MT6589_DBI_DBI_DITHER_16_OVFLW_BIT_B_MASK  0x07000000u
+#define MT6589_DBI_DBI_DITHER_16_ADD_LSHIFT_B_SHIFT 20
+#define MT6589_DBI_DBI_DITHER_16_ADD_LSHIFT_B_MASK  0x00700000u
+#define MT6589_DBI_DBI_DITHER_16_INPUT_RSHIFT_B_SHIFT 16
+#define MT6589_DBI_DBI_DITHER_16_INPUT_RSHIFT_B_MASK  0x00070000u
+#define MT6589_DBI_DBI_DITHER_16_LSB_ERR_SHIFT_G_SHIFT 12
+#define MT6589_DBI_DBI_DITHER_16_LSB_ERR_SHIFT_G_MASK  0x00007000u
+#define MT6589_DBI_DBI_DITHER_16_OVFLW_BIT_G_SHIFT 8
+#define MT6589_DBI_DBI_DITHER_16_OVFLW_BIT_G_MASK  0x00000700u
+#define MT6589_DBI_DBI_DITHER_16_ADD_LSHIFT_G_SHIFT 4
+#define MT6589_DBI_DBI_DITHER_16_ADD_LSHIFT_G_MASK  0x00000070u
+#define MT6589_DBI_DBI_DITHER_16_INPUT_RSHIFT_G_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_16_INPUT_RSHIFT_G_MASK  0x00000007u
+
+/* 0x0e44  DBI_DITHER_17 - DBI dither setting 16  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_DITHER_17 0x1400ce44u
+#define MT6589_DBI_DBI_DITHER_17_RESET 0x00000000u
+#define MT6589_DBI_DBI_DITHER_17_CRC_RDY_SHIFT 16
+#define MT6589_DBI_DBI_DITHER_17_CRC_RDY_MASK  0x00010000u
+#define MT6589_DBI_DBI_DITHER_17_CRC_OUT_SHIFT 0
+#define MT6589_DBI_DBI_DITHER_17_CRC_OUT_MASK  0x0000ffffu
+
+/* 0x0f00  DBI_PCMD0 - DBI Parallel Interface 0 Command Port  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PCMD0 0x1400cf00u
+#define MT6589_DBI_DBI_PCMD0_RESET 0x00000000u
+#define MT6589_DBI_DBI_PCMD0_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_PCMD0_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_PCMD0_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_PCMD0_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_PCMD0_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_PCMD0_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_PCMD0_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_PCMD0_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_PCMD0_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_PCMD0_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_PCMD0_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_PCMD0_OTHER_MASK  0x00003fffu
+
+/* 0x0f10  DBI_PDAT0 - DBI Parallel Interface 0 Data Port  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PDAT0 0x1400cf10u
+#define MT6589_DBI_DBI_PDAT0_RESET 0x00000000u
+#define MT6589_DBI_DBI_PDAT0_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_PDAT0_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_PDAT0_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_PDAT0_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_PDAT0_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_PDAT0_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_PDAT0_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_PDAT0_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_PDAT0_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_PDAT0_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_PDAT0_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_PDAT0_OTHER_MASK  0x00003fffu
+
+/* 0x0f20  DBI_PCMD1 - DBI Parallel Interface 1 Command Port  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PCMD1 0x1400cf20u
+#define MT6589_DBI_DBI_PCMD1_RESET 0x00000000u
+#define MT6589_DBI_DBI_PCMD1_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_PCMD1_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_PCMD1_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_PCMD1_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_PCMD1_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_PCMD1_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_PCMD1_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_PCMD1_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_PCMD1_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_PCMD1_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_PCMD1_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_PCMD1_OTHER_MASK  0x00003fffu
+
+/* 0x0f30  DBI_PDAT1 - DBI Parallel Interface 1 Data Port  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PDAT1 0x1400cf30u
+#define MT6589_DBI_DBI_PDAT1_RESET 0x00000000u
+#define MT6589_DBI_DBI_PDAT1_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_PDAT1_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_PDAT1_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_PDAT1_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_PDAT1_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_PDAT1_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_PDAT1_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_PDAT1_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_PDAT1_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_PDAT1_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_PDAT1_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_PDAT1_OTHER_MASK  0x00003fffu
+
+/* 0x0f40  DBI_PCMD2 - DBI Parallel Interface 2 Command Port  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PCMD2 0x1400cf40u
+#define MT6589_DBI_DBI_PCMD2_RESET 0x00000000u
+#define MT6589_DBI_DBI_PCMD2_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_PCMD2_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_PCMD2_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_PCMD2_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_PCMD2_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_PCMD2_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_PCMD2_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_PCMD2_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_PCMD2_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_PCMD2_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_PCMD2_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_PCMD2_OTHER_MASK  0x00003fffu
+
+/* 0x0f50  DBI_PDAT2 - DBI Parallel Interface 2 Data Port  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_PDAT2 0x1400cf50u
+#define MT6589_DBI_DBI_PDAT2_RESET 0x00000000u
+#define MT6589_DBI_DBI_PDAT2_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_PDAT2_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_PDAT2_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_PDAT2_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_PDAT2_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_PDAT2_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_PDAT2_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_PDAT2_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_PDAT2_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_PDAT2_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_PDAT2_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_PDAT2_OTHER_MASK  0x00003fffu
+
+/* 0x0f80  DBI_SCMD0 - DBI Serial Interface Command Port 0  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SCMD0 0x1400cf80u
+#define MT6589_DBI_DBI_SCMD0_RESET 0x00000000u
+#define MT6589_DBI_DBI_SCMD0_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_SCMD0_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_SCMD0_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_SCMD0_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_SCMD0_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_SCMD0_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_SCMD0_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_SCMD0_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_SCMD0_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_SCMD0_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_SCMD0_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_SCMD0_OTHER_MASK  0x00003fffu
+
+/* 0x0f90  DBI_SDAT0 - DBI Serial Interface Data Port 0  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SDAT0 0x1400cf90u
+#define MT6589_DBI_DBI_SDAT0_RESET 0x00000000u
+#define MT6589_DBI_DBI_SDAT0_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_SDAT0_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_SDAT0_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_SDAT0_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_SDAT0_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_SDAT0_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_SDAT0_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_SDAT0_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_SDAT0_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_SDAT0_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_SDAT0_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_SDAT0_OTHER_MASK  0x00003fffu
+
+/* 0x0fa0  DBI_SCMD1 - DBI Serial Interface Command Port 1  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SCMD1 0x1400cfa0u
+#define MT6589_DBI_DBI_SCMD1_RESET 0x00000000u
+#define MT6589_DBI_DBI_SCMD1_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_SCMD1_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_SCMD1_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_SCMD1_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_SCMD1_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_SCMD1_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_SCMD1_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_SCMD1_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_SCMD1_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_SCMD1_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_SCMD1_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_SCMD1_OTHER_MASK  0x00003fffu
+
+/* 0x0fb0  DBI_SDAT1 - DBI Serial Interface Data Port 1  [reset 0x00000000u] */
+#define MT6589_DBI_DBI_SDAT1 0x1400cfb0u
+#define MT6589_DBI_DBI_SDAT1_RESET 0x00000000u
+#define MT6589_DBI_DBI_SDAT1_DATA_31_16__SHIFT 31
+#define MT6589_DBI_DBI_SDAT1_DATA_31_16__MASK  0x80000000u
+#define MT6589_DBI_DBI_SDAT1_TYPE_SHIFT 30
+#define MT6589_DBI_DBI_SDAT1_TYPE_MASK  0x40000000u
+#define MT6589_DBI_DBI_SDAT1_OTHER_SHIFT 16
+#define MT6589_DBI_DBI_SDAT1_OTHER_MASK  0x3fff0000u
+#define MT6589_DBI_DBI_SDAT1_DATA_15_0__SHIFT 15
+#define MT6589_DBI_DBI_SDAT1_DATA_15_0__MASK  0x00008000u
+#define MT6589_DBI_DBI_SDAT1_TYPE_SHIFT 14
+#define MT6589_DBI_DBI_SDAT1_TYPE_MASK  0x00004000u
+#define MT6589_DBI_DBI_SDAT1_OTHER_SHIFT 0
+#define MT6589_DBI_DBI_SDAT1_OTHER_MASK  0x00003fffu
+
+#define MT6589_DBI_NUM_REGS 100
+
+#endif /* HW_ARM_DBI_REGS_H */
