@@ -344,9 +344,9 @@ static uint32_t mt6589_pwrap_status(Mt6589PwrapState *s)
          */
         fprintf(stderr, "PWRAP: status read with fsm=%u (polls=%u)\n", s->fsm, s->vldclr_polls);
     }
-    if (s->fsm == FSM_WFVLDCLR && ++s->vldclr_polls > 8) {
+    if (s->fsm != FSM_IDLE && ++s->vldclr_polls > 8) {
         if (mt6589_pwrap_log_enabled()) {
-            fprintf(stderr, "PWRAP: WFVLDCLR abandoned, timing out to idle\n");
+            fprintf(stderr, "PWRAP: state %u abandoned, timing out to idle\n", s->fsm);
         }
         s->fsm = FSM_IDLE;
         s->vldclr_polls = 0;
