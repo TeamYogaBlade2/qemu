@@ -511,8 +511,9 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
      */
     if (mt6589_pwrap_log_enabled()) {
         fprintf(stderr, "PWRAP W off=%02" HWADDR_PRIx " val=%08" PRIx32
-                " fsm=%u pc=%08x\n", offset, cmd, s->fsm,
-                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0);
+                " fsm=%u pc=%08x lr=%08x\n", offset, cmd, s->fsm,
+                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0,
+                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0);
     }
 
     switch (offset) {

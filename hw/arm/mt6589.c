@@ -1076,6 +1076,16 @@ static void mt6589_pmic_pulse(void *opaque)
 
 void mt6589_eint_pmic_pulse_init(Mt6589State *s)
 {
+    /*
+     * MT6589_NO_PMIC_IRQ=1 leaves the PMIC's interrupt line quiet. It exists to answer a specific
+     * question: if the PMIC thread never runs, does the init thread still stop? That separates "the
+     * PMIC thread holds the lock" from "a lock is held by somebody else" without guessing.
+     */
+    const char *off = getenv("MT6589_NO_PMIC_IRQ");
+
+    if (off && *off && strcmp(off, "0") != 0) {
+        return;
+    }
     s->pmic_pulse = timer_new_ns(QEMU_CLOCK_VIRTUAL, mt6589_pmic_pulse, s);
     s->pmic_pulse_drop = timer_new_ns(QEMU_CLOCK_VIRTUAL, mt6589_pmic_pulse_drop, s);
     timer_mod(s->pmic_pulse, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100000000);
