@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * nli_arb - generated from the MT6589 datasheet by
  * mt6589-emulator/tools/gen_regs_header.py.  DO NOT EDIT.

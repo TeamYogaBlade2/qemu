@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * MediaTek MT6589 TOPRGU - top-level reset generator and watchdog
  *

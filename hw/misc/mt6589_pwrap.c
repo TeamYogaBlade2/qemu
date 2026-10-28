@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * MediaTek MT6589 PMIC_WRAP (pwrap) at 0x1000_F000
  *
