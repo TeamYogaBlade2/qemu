@@ -32,16 +32,9 @@ struct Mt6589PwrapState {
     uint32_t aux_int_en;
     uint32_t aux_event_in_en, aux_event_dst_en, aux_event_sta;
     uint32_t vldclr_polls;
-    /* How many FQMTR measurements the guest has started. */
-    uint32_t fqmtr_n;
-    uint32_t fqmtr_started;
+    uint32_t fsm_owner;      /* task that parked the result */
     uint32_t aux_harb_sta0, aux_harb_sta1;
 
-    /*
-     * PMIC-side register file, indexed by WACS number (PMIC address >> 1). 32K
-     * entries covers the whole MT6320 address space at 16 bits each.
-     */
-    uint16_t pmic[0x8000];
 
     /* The device on the other side; when set, accesses go through it. */
     struct Mt6320PmicState *pmic_dev;

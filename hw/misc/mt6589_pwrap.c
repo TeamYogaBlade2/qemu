@@ -143,171 +143,6 @@
 #define CMD_ADDR_SHIFT 16
 #define CMD_DATA_MASK  0xffffu
 
-/*
- * PMIC power-on values that the guest reads before writing anything.
- *
- * The wire address is the PMIC register number halved, because the wrapper
- * decodes `(cmd >> 16) & 0x7fff` as the WACS register - so PMIC 0x0100 arrives as
- * 0x0080 and, for example, PMIC 0xBC0A (DEW_READ_TEST) as 0x5E05.
- *
- * DEW_READ_TEST is the wrapper's link self-test: _pwrap_init_sidly() reads it at
- * each candidate delay and keeps the delays that return 0x5AA5. Returning
- * anything else makes every delay fail and the initialisation abort.
- */
-struct Mt6589PwrapDefault {
-    uint16_t wacs;
-    uint16_t value;
-};
-
-static const struct Mt6589PwrapDefault mt6589_pmic_defaults[] = {
-    /* PMIC 0xBC0A -> 0x5E05: the link read test, fixed value. */
-    { 0x5E05, 0x5AA5 },
-
-    /*
-     * The PMIC's auxiliary ADC channels (AUXADC_ADC0..ADC9 at 0x0512..0x0524, so
-     * wire addresses 0x0289..0x0292).
-     *
-     * Each channel register is bit 15 = ready and bits 9:0 = the 10-bit code
-     * (PMIC_RG_ADC_RDY_Cn_SHIFT 15, PMIC_RG_ADC_OUT_Cn_SHIFT 0). With no default
-     * they read 0, which means "conversion not ready" for ever, and the PMIC
-     * thermal and battery code retries indefinitely:
-     *
-     *     [PWRAP] index=76..79 ... addr=51a
-     *     [PWRAP] ERROR,line=357 wait_for_fsm_idle fail,return_value=9
-     *     [PWRAP] ERROR,line=388 timeout:BUG_ON here
-     *     [Power/PMIC] [pmic_read_interface] Reg[51a]= pmic_wrap read data fail
-     *     [THERMAL/MONITOR] thermal_zone_bind_cooling_device Fail. Code(-22)
-     *
-     * measured. Reporting ready with a mid-scale code is the honest model of an ADC
-     * with nothing connected to it: the conversion has completed and the answer is
-     * unremarkable, which is what a board sitting at room temperature looks like. The
-     * SoC-side AUXADC at 0x1100_1000 is modelled separately and carries the battery
-     * and charger values the drivers actually act on.
-     */
-    { 0x0289, 0x8000 | 0x200 },     /* AUXADC_ADC0 */
-    { 0x028A, 0x8000 | 0x200 },     /* AUXADC_ADC1 */
-    { 0x028B, 0x8000 | 0x200 },     /* AUXADC_ADC2 */
-    { 0x028C, 0x8000 | 0x200 },     /* AUXADC_ADC3 */
-    { 0x028D, 0x8000 | 0x200 },     /* AUXADC_ADC4 */
-    { 0x028E, 0x8000 | 0x200 },     /* AUXADC_ADC5 */
-    { 0x028F, 0x8000 | 0x200 },     /* AUXADC_ADC6 */
-    { 0x0290, 0x8000 | 0x200 },     /* AUXADC_ADC7 */
-    { 0x0291, 0x8000 | 0x200 },     /* AUXADC_ADC8 */
-    { 0x0292, 0x8000 | 0x200 },     /* AUXADC_ADC9 */
-    /*
-     * PMIC 0x0300 chip ID -> 0x0180. The MT6320 answers 0x2020 on this board
-     * (operator's hardware, E2 silicon). Without a chip ID the kernel's
-     * mt6397_probe() reads 0, rejects the part as "unsupported chip", and every
-     * consumer of the PMIC defers for ever.
-     */
-    { 0x0180, 0x2020 },
-
-    /*
-     * The RTC's frequency meter (FQMTR), reached through PWRAP like every other
-     * PMIC register: mt_rtc.c's RTC_Read() is pwrap_read(). The addresses halve
-     * on the wire, so FQMTR_CON0 0x0188 -> 0x00C4 and FQMTR_CON2 0x018C ->
-     * 0x00C6 (docs/ips/pwrap.md records the captured traffic).
-     *
-     * CON1 holds the window size (4) and CON0 the "started" bit; bit 3 of CON0
-     * reads back clear so the guest sees the measurement as already complete.
-     * The *results* are not a default value - see the CON2 read path.
-     */
-    { 0x00C4, 0x0000 },
-    { 0x00C5, 0x0004 },
-
-    /*
-     * DEW (the PMIC-side cipher engine) reports ready. mt_pmic_wrap_init.c waits
-     * with `do { pwrap_read_nochk(DEW_CIPHER_RDY, &rdata); } while (rdata != 0x1)`,
-     * so leaving this at the reset value 0 is an endless wait that only the
-     * 1-second timeout ends - which then reports "Enable Encryption fail" and
-     * drops the preloader into emergency download mode.
-     *
-     * DEW_BASE 0xBC00 + 0x20 = 0xBC20, halved to 0x5E10 on the wire.
-     */
-    { 0x5E10, 0x0001 },
-
-    /*
-     * CHRSTATUS.PWRKEY_DEB (0x0144 bit 3). pmic_detect_powerkey() reads it and
-     * reports the key as *released* when the bit is 1, pressed when it is 0 - so
-     * a zeroed PMIC register file says "power key held", which is exactly what
-     * sent the preloader to "Power key boot!" and then to emergency download
-     * mode. Bit 3 set = released, which is the state of a board nobody is
-     * touching. Wire address 0x0144 >> 1 = 0x00a2.
-     */
-    /*
-     * PWRKEY_DEB stays *clear*: bit 3 = 1 means released, and the preloader's
-     * platform_boot_status() checks mtk_detect_key(8) before it looks at the USB
-     * cable. Reporting the key as held is what selects BR_POWER_KEY, i.e. a
-     * normal boot from storage, which is the path this emulator is meant to
-     * exercise. (It is read again later and reported released there, which is
-     * what a real boot looks like too - the key is let go once boot starts.)
-     */
-    { 0x00A2, 0x0000 },
-
-    /*
-     * PMIC-side AUXADC, registers 0x0512..0x0530 (wire 0x0289.. and so on).
-     *
-     * This is a DIFFERENT thing from the SoC's AUXADC at 0x1100_3000, and the
-     * two share the macro name AUXADC_CON0 in LK's headers - mt_pmic.h maps it to
-     * PMIC 0x0540 while mtk_auxadc_hw.h maps it to the SoC block. Battery and
-     * charger voltages come from THIS one, read over PWRAP:
-     *
-     *   mt_pmic.c: upmu_get_rg_adc_rdy_c0() -> pmic_read_interface(AUXADC_ADC0,
-     *              PMIC_RG_ADC_RDY_C0_MASK=0x1, PMIC_RG_ADC_RDY_C0_SHIFT=15)
-     *   then:      while (upmu_get_rg_adc_rdy_c0() != 1) { ... "Time out!" }
-     *
-     * So bit 15 of PMIC 0x0512 must read set or LK reports a timeout, takes the
-     * sample as 0, concludes "is_low_battery, TRUE" and calls mt_power_off,
-     * which spins asking for a charger a desktop host cannot provide.
-     *
-     * Layout, from mt_pmic.h:
-     *   PMIC_RG_ADC_OUT_C0_MASK  0x3FF, shift 0   <- the 10-bit sample
-     *   PMIC_RG_ADC_RDY_C0_MASK  0x1,   shift 15  <- ready
-     *
-     * The sample is the battery voltage through a divider. blade10's
-     * cust_battery.h sets R_BAT_SENSE = 4 and mt_pmic.h has VOLTAGE_FULL_RANGE
-     * 1200 over ADC_PRECISE 1024, so
-     *
-     *     mV = raw * 4 * 1200 / 1024
-     *
-     * and raw 896 reads back as 4200 mV - a charged battery. That matters
-     * because LK's is_low_battery() (mt_bat_bq24196.c) compares against
-     * BATTERY_LOWVOL_THRESOLD 3450 and, below it, calls mt_power_off, which then
-     * spins waiting for a charger that a desktop host cannot provide.
-     *
-     * 0x8000 | 896 = 0x8380.
-     */
-    { 0x0289, 0x8380 },   /* PMIC 0x0512 AUXADC_ADC0: RDY_C0 | 896 -> 4200 mV */
-    { 0x028A, 0x8380 },   /* PMIC 0x0514 AUXADC_ADC1 */
-    { 0x028B, 0x8380 },   /* PMIC 0x0516 AUXADC_ADC2 */
-    /*
-     * The trim variant, which is what LK actually reads. Its call passes
-     * trimd = 1, so PMIC_IMM_GetOneChannelValue() takes the
-     * upmu_get_rg_adc_out_c0_trim() branch - AUXADC_ADC11 (0x0528, wire 0x294)
-     * with PMIC_RG_ADC_OUT_C0_TRIM_MASK 0x3FF at shift 0. Setting only ADC0 left
-     * ret_data reading 0, i.e. a flat battery, even though the ready bit was
-     * set and the timeout was gone.
-     */
-    { 0x0294, 0x0380 },   /* PMIC 0x0528 AUXADC_ADC11: trim sample 896 */
-
-    /*
-     * CHR_CON0.PMIC_RGS_CHRDET (wire 0x0000, bit 5) is left *clear*: no cable is
-     * connected. It has to be modelled explicitly rather than left to the
-     * zeroed register file only in the sense that its value is deliberate.
-     *
-     * Setting it (as the Renode work did, to get past "Unknown boot!") makes
-     * platform_boot_status() take the BR_USB branch *before* falling through,
-     * so the preloader enters USB download mode and prints the "READY" handshake
-     * instead of booting. With the power key reported as held the chain reaches
-     * BR_POWER_KEY first and never consults this, which is the ordering the
-     * preloader's own source has.
-     */
-    { 0x0000, 0x0000 },
-};
-
-/* Store the PMIC-side register file. Indexed by WACS number (address >> 1). */
-#define PMIC_NUM_REGS 0x8000
-
 static bool mt6589_pwrap_log_enabled(void)
 {
     static int enabled = -1;
@@ -322,15 +157,9 @@ static void mt6589_pwrap_reset(DeviceState *dev)
 {
     Mt6589PwrapState *s = MT6589_PWRAP(dev);
 
-    memset(s->pmic, 0, sizeof(s->pmic));
-    for (size_t i = 0; i < ARRAY_SIZE(mt6589_pmic_defaults); i++) {
-        s->pmic[mt6589_pmic_defaults[i].wacs] = mt6589_pmic_defaults[i].value;
-    }
     s->fsm = FSM_IDLE;
     s->rdata = 0;
     s->cipher_rdy = 1;
-    s->fqmtr_n = 0;
-    s->fqmtr_started = 0;
 }
 
 /* The status word as the guest's transaction routine expects to read it. */
@@ -408,69 +237,26 @@ static void mt6589_pwrap_aux_set(Mt6589PwrapState *s, hwaddr offset,
  * returns them directly rather than simulating the measurement, so this is a
  * shaped response and documented as such, not a measurement.
  */
-#define FQMTR_CON0_WACS  0x00C4
-#define FQMTR_CON1_WACS  0x00C5
-#define FQMTR_CON2_WACS  0x00C6
-static const uint16_t mt6589_fqmtr_results[] = { 5, 3000, 0, 0 };
-
+/*
+ * PMIC register access. The registers belong to the PMIC device (hw/misc/mt6320_pmic.c), which owns
+ * the imported map from the downstream's upmu_hw.h, the frequency meter's result sequence and the
+ * chip id; the wrapper only carries the transaction. The WACS field holds the register address halved,
+ * which is why these helpers shift.
+ */
 uint16_t mt6589_pwrap_pmic_read(Mt6589PwrapState *s, uint16_t wacs)
 {
-    /*
-     * The register file still lives here. hw/misc/mt6320_pmic.c holds the imported map and the
-     * device split, but handing the storage over is not done: doing it as a straight swap broke the
-     * preloader's cipher handshake (wrap_init fail, 0x1a), because this function's FQMTR and
-     * cipher-related bookkeeping has to move with it. Until that move is finished and verified, the
-     * wrapper keeps serving the values the boot depends on rather than a half-migrated copy.
-     */
-
-    if (wacs == 0x0000 || wacs == 0x0051 || wacs == 0x00a2) {
-        qemu_log_mask(LOG_UNIMP, "pwrap: rd wacs=%04x -> %04x\n", wacs,
-                      s->pmic[wacs]);
+    if (!s->pmic_dev) {
+        return 0;               /* no PMIC on the bus: the read has nothing to return */
     }
-    if (wacs == FQMTR_CON2_WACS) {
-        /*
-         * CON2 carries the measurement result. The guest reads it twice per
-         * measurement with different expectations:
-         *
-         *   while (!(RTC_Read(FQMTR_CON2) == 0) && ...)   ; must be 0 to enter
-         *   ret = RTC_Read(FQMTR_CON2);                   ; the result
-         *
-         * Both are the same register, so the value handed back is whatever the
-         * last completed measurement produced - and it is 0 until the guest has
-         * started one by writing CON0. That is what makes the first wait exit.
-         */
-        if (s->fqmtr_started == 0) {
-            return 0;
-        }
-        uint32_t i = s->fqmtr_n ? s->fqmtr_n - 1 : 0;
-        return i < ARRAY_SIZE(mt6589_fqmtr_results) ?
-               mt6589_fqmtr_results[i] :
-               mt6589_fqmtr_results[ARRAY_SIZE(mt6589_fqmtr_results) - 1];
-    }
-    if (wacs == FQMTR_CON0_WACS) {
-        /* Bit 3 set means "measurement in progress"; report it finished. */
-        return s->pmic[wacs] & ~0x0008;
-    }
-    return s->pmic[wacs];
+    return mt6320_pmic_read_wacs(s->pmic_dev, wacs);
 }
 
-void mt6589_pwrap_pmic_write(Mt6589PwrapState *s, uint16_t wacs,
-                                    uint16_t value)
+void mt6589_pwrap_pmic_write(Mt6589PwrapState *s, uint16_t wacs, uint16_t value)
 {
-    s->pmic[wacs] = value;
-
-    if (wacs == FQMTR_CON1_WACS) {
-        /*
-         * The window-size write is what advances the result sequence. Counting
-         * the CON0 start instead would be wrong: CON0 also carries the measure
-         * source, and get_frequency_meter() writes it on every call including
-         * the ones whose result is discarded by the wait above.
-         */
-        s->fqmtr_started = 1;
-        if (s->fqmtr_n < ARRAY_SIZE(mt6589_fqmtr_results) + 1) {
-            s->fqmtr_n++;
-        }
+    if (!s->pmic_dev) {
+        return;
     }
+    mt6320_pmic_write_wacs(s->pmic_dev, wacs, value);
 }
 
 static uint64_t mt6589_pwrap_read(void *opaque, hwaddr offset, unsigned size)
@@ -580,11 +366,13 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
             s->rdata = mt6589_pwrap_pmic_read(s, wacs);
             s->fsm = FSM_WFVLDCLR;
             s->vldclr_polls = 0;
+            s->fsm_owner = mt6589_guest_task_ptr();
         }
         return;
     case R_VLDCLR:
         /* Data collected: back to idle. */
         s->fsm = FSM_IDLE;
+        s->fsm_owner = 0;
         s->vldclr_polls = 0;
         return;
     case R_DIO_EN:

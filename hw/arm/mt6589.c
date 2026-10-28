@@ -1066,6 +1066,26 @@ static void mt6589_init(Object *obj)
  *
  * Returns "?" when it cannot be determined - a wrong name is worse than none.
  */
+/* The current task_struct address, or 0 when it cannot be determined. */
+uint32_t mt6589_guest_task_ptr(void)
+{
+    CPUState *cs = current_cpu;
+    uint32_t sp, base, task;
+
+    if (!cs || !cpu_env(cs)) {
+        return 0;
+    }
+    sp = cpu_env(cs)->regs[13];
+    base = sp & ~0x1fffu;
+    if (base < 0xc0000000u) {
+        return 0;
+    }
+    if (cpu_memory_rw_debug(cs, base + 12, (uint8_t *)&task, 4, 0) != 0) {
+        return 0;
+    }
+    return (task < 0xc0000000u || task > 0xe0000000u) ? 0 : task;
+}
+
 const char *mt6589_guest_task(void)
 {
     static char comm[24];
