@@ -180,6 +180,18 @@ static void mt6589_gpt_rearm(Mt6589State *s)
     timer_mod(&s->gpt_tick, soonest);
 }
 
+static bool mt6589_gpt_log_enabled(void)
+{
+    static int enabled = -1;
+
+    if (enabled < 0) {
+        const char *e = getenv("MT6589_GPT_LOG");
+
+        enabled = e && *e && strcmp(e, "0") != 0;
+    }
+    return enabled;
+}
+
 static void mt6589_gpt_tick(void *opaque)
 {
     Mt6589State *s = opaque;
@@ -195,6 +207,10 @@ static void mt6589_gpt_tick(void *opaque)
             continue;
         }
         /* Compare reached: raise the channel's status bit. */
+        if (mt6589_gpt_log_enabled()) {
+            fprintf(stderr, "GPT match ch%d compare=%u count=%u con=%08x\n", n, compare,
+                    mt6589_gpt_count(s, n), con);
+        }
         s->gpt_irqsta |= MT6589_GPT_IRQ_BIT(n);
 
         switch ((con & MT6589_GPT_CON_MODE_MASK) >> MT6589_GPT_CON_MODE_SHIFT) {
