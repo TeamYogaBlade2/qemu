@@ -69,11 +69,13 @@
 #include "qemu/log.h"
 #include "qemu/module.h"
 #include "hw/arm/mt6589.h"
+#include "hw/misc/mt6320_pmic.h"
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
 #include "target/arm/cpu.h"
 #include "hw/arm/mt6589.h"
+#include "hw/misc/mt6320_pmic.h"
 #include "hw/arm/mt6589-regs/mt6589-pwrap-regs.h"
 
 /* Offset in the wrapper's own window, named as the datasheet names it. */
@@ -105,6 +107,15 @@
  */
 #define R_DIO_EN PWRAP(DIO_EN)
 #define R_ARB_SIDLY PWRAP(SIDLY)
+/*
+ * Event routing, which both the downstream (pwrap_hal.c) and mainline (mtk-pmic-wrap.c) program as
+ * part of the wrapper init: EVENT_IN_EN 0x34, EVENT_DST_EN 0x38, and the status pair at 0xD4/0xD8.
+ * Without them those writes were dropped and read back zero.
+ */
+#define R_EVENT_IN_EN  PWRAP(EVENT_IN_EN)
+#define R_EVENT_DST_EN PWRAP(EVENT_DST_EN)
+#define R_EVENT_STA    PWRAP(EVENT_STA)
+#define R_EVENT_STACLR PWRAP(EVENT_STACLR)
 #define R_HIPRIO_EN PWRAP(HIPRIO_ARB_EN)
 #define R_HARB_STA0 PWRAP(HARB_STA0)
 #define R_HARB_STA1 PWRAP(HARB_STA1)
@@ -402,8 +413,16 @@ static void mt6589_pwrap_aux_set(Mt6589PwrapState *s, hwaddr offset,
 #define FQMTR_CON2_WACS  0x00C6
 static const uint16_t mt6589_fqmtr_results[] = { 5, 3000, 0, 0 };
 
-static uint16_t mt6589_pwrap_pmic_read(Mt6589PwrapState *s, uint16_t wacs)
+uint16_t mt6589_pwrap_pmic_read(Mt6589PwrapState *s, uint16_t wacs)
 {
+    /*
+     * The register file still lives here. hw/misc/mt6320_pmic.c holds the imported map and the
+     * device split, but handing the storage over is not done: doing it as a straight swap broke the
+     * preloader's cipher handshake (wrap_init fail, 0x1a), because this function's FQMTR and
+     * cipher-related bookkeeping has to move with it. Until that move is finished and verified, the
+     * wrapper keeps serving the values the boot depends on rather than a half-migrated copy.
+     */
+
     if (wacs == 0x0000 || wacs == 0x0051 || wacs == 0x00a2) {
         qemu_log_mask(LOG_UNIMP, "pwrap: rd wacs=%04x -> %04x\n", wacs,
                       s->pmic[wacs]);
@@ -435,7 +454,7 @@ static uint16_t mt6589_pwrap_pmic_read(Mt6589PwrapState *s, uint16_t wacs)
     return s->pmic[wacs];
 }
 
-static void mt6589_pwrap_pmic_write(Mt6589PwrapState *s, uint16_t wacs,
+void mt6589_pwrap_pmic_write(Mt6589PwrapState *s, uint16_t wacs,
                                     uint16_t value)
 {
     s->pmic[wacs] = value;
@@ -480,6 +499,14 @@ static uint64_t mt6589_pwrap_read(void *opaque, hwaddr offset, unsigned size)
     case R_HARB_STA1:
     case R_INT_EN:
         return mt6589_pwrap_aux_get(s, offset);
+    case R_EVENT_IN_EN:
+        return s->aux_event_in_en;
+    case R_EVENT_DST_EN:
+        return s->aux_event_dst_en;
+    case R_EVENT_STA:
+        return s->aux_event_sta;
+    case R_EVENT_STACLR:
+        return 0;
     case R_CIPHER_RDY:
         /*
          * PWRAP's own cipher-ready bit, not the PMIC-side DEW one. The kernel's
@@ -568,6 +595,15 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
     case R_INT_EN:
         mt6589_pwrap_aux_set(s, offset, cmd);
         return;
+    case R_EVENT_IN_EN:
+        s->aux_event_in_en = cmd;
+        return;
+    case R_EVENT_DST_EN:
+        s->aux_event_dst_en = cmd;
+        return;
+    case R_EVENT_STACLR:
+        s->aux_event_sta &= ~cmd;
+        return;
     case R_MAN_CMD:
         /* Manual mode: same transaction, different register pair. */
         if (cmd & CMD_ISWRITE) {
@@ -606,6 +642,11 @@ static void mt6589_pwrap_class_init(ObjectClass *oc, const void *data)
     DeviceClass *dc = DEVICE_CLASS(oc);
 
     device_class_set_legacy_reset(dc, mt6589_pwrap_reset);
+}
+
+void mt6589_pwrap_connect_pmic(Mt6589PwrapState *s, Mt6320PmicState *pmic)
+{
+    s->pmic_dev = pmic;
 }
 
 static const TypeInfo mt6589_pwrap_types[] = {

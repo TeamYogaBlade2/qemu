@@ -30,6 +30,7 @@ struct Mt6589PwrapState {
     uint32_t cipher_rdy;
     uint32_t aux_dio_en, aux_arb_sidly, aux_hiprio_en;
     uint32_t aux_int_en;
+    uint32_t aux_event_in_en, aux_event_dst_en, aux_event_sta;
     uint32_t vldclr_polls;
     /* How many FQMTR measurements the guest has started. */
     uint32_t fqmtr_n;
@@ -41,6 +42,15 @@ struct Mt6589PwrapState {
      * entries covers the whole MT6320 address space at 16 bits each.
      */
     uint16_t pmic[0x8000];
+
+    /* The device on the other side; when set, accesses go through it. */
+    struct Mt6320PmicState *pmic_dev;
 };
+
+/* PMIC register access by WACS number, shared with the pwrap bridge. */
+uint16_t mt6589_pwrap_pmic_read(Mt6589PwrapState *s, uint16_t wacs);
+void mt6589_pwrap_pmic_write(Mt6589PwrapState *s, uint16_t wacs, uint16_t value);
+
+void mt6589_pwrap_connect_pmic(Mt6589PwrapState *s, struct Mt6320PmicState *pmic);
 
 #endif /* HW_MISC_MT6589_PWRAP_H */

@@ -28,6 +28,8 @@
 #include "hw/i2c/mt6589_s7300.h"
 #include "hw/gpio/mt6589_gpio.h"
 #include "hw/misc/mt6589_eint.h"
+#include "hw/misc/mt6589_pwrap_bridge.h"
+#include "hw/misc/mt6320_pmic.h"
 #include "hw/misc/mt6589_dramc.h"
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
@@ -309,6 +311,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
  * 0x1020_c000, eint 0x1000_b000) and "interrupts = <GIC_SPI 116>", i.e. line 148.
  */
 #define MT6589_EINT_BASE_PHYS   0x1000B000
+/* The wrapper's second window, "pwrap-bridge" in mt6589.dtsi. */
+#define MT6589_PWRAP_BRIDGE_BASE_PHYS 0x11017000
 #define MT6589_EINT_IRQ         148
 /* The PMIC's interrupt output is GPIO 37 in EINT mode = EINT 3 (cust_eint.h). */
 #define MT6589_EINT_PMIC_LINE   3
@@ -385,6 +389,8 @@ struct Mt6589State {
     Mt6589MsdcState *msdc[MT6589_NUM_MSDC];
     Mt6589I2CState *i2c[MT6589_NUM_I2C];
     Mt6589S7300State s7300;
+    Mt6589PwrapBridgeState *pwrap_bridge;
+    Mt6320PmicState *pmic;
     Mt6589GpioState *gpio;
     Mt6589EintState *eint;
     QEMUTimer *pmic_pulse;

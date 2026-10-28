@@ -1362,6 +1362,17 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
                        qdev_get_gpio_in(s->gic, MT6589_GIC_GPIO(MT6589_EINT_IRQ)));
 
     /*
+     * The wrapper's second window. The boot initialises it (IORD_ARB_EN, WACS3/4_EN, TIMER_EN,
+     * INT_EN, INIT_DONE3/4) and the bridge's chains reach the same PMIC register file as the main
+     * window - without a model those writes went to the peripheral catch-all and read back zero.
+     */
+    s->pwrap_bridge = MT6589_PWRAP_BRIDGE(object_new(TYPE_MT6589_PWRAP_BRIDGE));
+    object_property_add_child(OBJECT(s), "pwrap-bridge", OBJECT(s->pwrap_bridge));
+    mt6589_pwrap_bridge_connect(s->pwrap_bridge, s->pwrap);
+    qdev_realize(DEVICE(s->pwrap_bridge), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->pwrap_bridge), 0, MT6589_PWRAP_BRIDGE_BASE_PHYS);
+
+    /*
      * The PMIC asserts its interrupt output (GPIO 37 in EINT mode, i.e. EINT 3) when it has
      * something to report, and drops it when the handler acknowledges the source. The model has no
      * MT6320 interrupt registers to acknowledge, so holding the line asserted made the handler
@@ -1427,6 +1438,17 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     object_property_add_child(OBJECT(s), "pwrap", OBJECT(s->pwrap));
     qdev_realize(DEVICE(s->pwrap), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->pwrap), 0, MT6589_PWRAP_BASE);
+
+    /*
+     * The PMIC is its own device, not part of the wrapper: it has its own register map (imported
+     * from the downstream's upmu_hw.h by tools/gen_pmic_regs.py) and its own revision behaviour.
+     * The wrapper is only the transport - the same split mainline makes between mtk-pmic-wrap and
+     * mt6323.
+     */
+    s->pmic = MT6320_PMIC(object_new(TYPE_MT6320_PMIC));
+    object_property_add_child(OBJECT(s), "pmic", OBJECT(s->pmic));
+    qdev_realize(DEVICE(s->pmic), NULL, &error_fatal);
+    mt6589_pwrap_connect_pmic(s->pwrap, s->pmic);
 
     /*
      * DRAMC at 0x1000_4000. The preloader runs a full DDR calibration here and
