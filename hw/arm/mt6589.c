@@ -116,6 +116,19 @@ static uint32_t mt6589_gpt_count_raw(Mt6589State *s, int n)
     return (uint32_t)((elapsed * hz) / 1000000000ull);
 }
 
+/* The same elapsed time as a 64-bit value; GPT6 is the channel that uses it. */
+static uint64_t mt6589_gpt_count64(Mt6589State *s, int n)
+{
+    int64_t elapsed = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) -
+                      s->gpt_chan[n].start_ns;
+    uint64_t hz = mt6589_gpt_channel_hz(s, n);
+
+    if (elapsed < 0) {
+        return 0;
+    }
+    return (uint64_t)((elapsed * hz) / 1000000000ull);
+}
+
 static uint32_t mt6589_gpt_count(Mt6589State *s, int n)
 {
     /*
@@ -256,10 +269,26 @@ static uint64_t mt6589_gpt_read(void *opaque, hwaddr offset, unsigned size)
     for (int n = 0; n < MT6589_GPT_NUM_CHANNELS; n++) {
         hwaddr base = MT6589_GPT_CHAN(n);
 
-        if (offset < base || offset >= base + 0x10) {
+        /* Only the last channel (GPT6, the 64-bit one) has registers past +0x10. */
+        if (offset < base ||
+            offset >= base + (n == MT6589_GPT_NUM_CHANNELS - 1 ? 0x20 : 0x10)) {
             continue;
         }
         switch (offset - base) {
+        case MT6589_GPT_CNTH: {
+            static unsigned long reads;
+
+            if (n == MT6589_GPT_NUM_CHANNELS - 1) {
+                if (mt6589_gpt_log_enabled() && (reads++ % 5000) == 0) {
+                    fprintf(stderr, "GPT6 COUNTH read #%lu = %08x\n", reads,
+                            (uint32_t)(mt6589_gpt_count64(s, n) >> 32));
+                }
+                return (uint32_t)(mt6589_gpt_count64(s, n) >> 32);
+            }
+            return 0;
+        }
+        case MT6589_GPT_CMPH:
+            return (n == MT6589_GPT_NUM_CHANNELS - 1) ? s->gpt_chan[n].compare_h : 0;
         case MT6589_GPT_CON:
             return s->gpt_chan[n].con;
         case MT6589_GPT_CLK:
@@ -296,10 +325,24 @@ static void mt6589_gpt_write(void *opaque, hwaddr offset, uint64_t value,
     for (int n = 0; n < MT6589_GPT_NUM_CHANNELS; n++) {
         hwaddr base = MT6589_GPT_CHAN(n);
 
-        if (offset < base || offset >= base + 0x10) {
+        /* Only the last channel (GPT6, the 64-bit one) has registers past +0x10. */
+        if (offset < base ||
+            offset >= base + (n == MT6589_GPT_NUM_CHANNELS - 1 ? 0x20 : 0x10)) {
             continue;
         }
         switch (offset - base) {
+        case MT6589_GPT_CNTH:
+            return;             /* read-only: the high half of the 64-bit counter */
+        case MT6589_GPT_CMPH:
+            /*
+             * GPT6's compare high word. The datasheet puts it at channel base + 0x1c, which for GPT6
+             * (base 0x60) is 0x7c and is where the downstream driver's GPT_CMPH lands.
+             */
+            if (n == MT6589_GPT_NUM_CHANNELS - 1) {
+                s->gpt_chan[n].compare_h = (uint32_t)value;
+                mt6589_gpt_rearm(s);
+            }
+            return;
         case MT6589_GPT_CON:
             /* CLR reloads the counter; EN starts it. Both matter: the guest
              * writes CLR then EN, and treating EN alone as the start makes the

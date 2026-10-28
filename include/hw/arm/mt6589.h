@@ -234,6 +234,15 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GPT_COMPARE      0x0c
 #define MT6589_GPT_NUM_CHANNELS 6
 /*
+ * GPT6 is the 64-bit one. The datasheet gives it its own low/high register pair at 0x60:
+ * COUNTL 0x68, COMPAREL 0x6c, COUNTH 0x78, COMPAREH 0x7c - which is the channel base (0x60) plus
+ * 0x18 and 0x1c, exactly the offsets the downstream driver uses for GPT_CNTH and GPT_CMPH. This is
+ * the kernel's time base: ca7_timer.c requests GPT6 as GPT_FREE_RUN and mt_gpt.c sets
+ * GPT_FEAT_64_BIT on it.
+ */
+#define MT6589_GPT_CNTH  0x18
+#define MT6589_GPT_CMPH  0x1c
+/*
  * GPT interrupt: GIC line 145 = GIC_PRIVATE_SIGNALS(32) + SPI 113.
  *
  * Three independent sources agree, and they overrule an earlier reading of this
@@ -385,6 +394,8 @@ struct Mt6589State {
          * only counts when CON.EN is set, so a disabled channel reads back what
          * it had reached - or 0 after CON.CLR. */
         uint32_t frozen_count;
+        /* GPT6 only: the high halves of the 64-bit counter and compare. */
+        uint32_t compare_h;
     } gpt_chan[MT6589_GPT_NUM_CHANNELS];
 
     SerialMM *uart[MT6589_NUM_UARTS];
