@@ -116,8 +116,21 @@ static uint64_t mt6589_gpio_read(void *opaque, hwaddr offset, unsigned size)
         hwaddr bank = offset - GPIO(GPIO_DIN0);
         uint32_t latched = s->regs[(GPIO(GPIO_DOUT0) + bank) >> 2];
         uint32_t inv = s->regs[(GPIO(GPIO_DINV0) + bank) >> 2];
+        uint32_t dir = s->regs[(GPIO(GPIO_DIR0) + bank) >> 2];
+        uint32_t pullen = s->regs[(GPIO(GPIO_PULLEN0) + bank) >> 2];
+        uint32_t pullsel = s->regs[(GPIO(GPIO_PULLSEL0) + bank) >> 2];
 
-        v = latched ^ inv;
+        /*
+         * A pin configured as an input reads what the pad sees. Nothing is attached to these pads,
+         * so the pull decides: pull-up reads 1, pull-down reads 0, and a floating pin reads the
+         * output latch (the only defined value left). This matters concretely - the panel driver
+         * identifies the display by reading a strapping pin, and a floating read of 0 makes it
+         * decide the panel does not match.
+         */
+        uint32_t pads = (dir & ~(pullen & pullsel)) |          /* inputs with pull-up -> 1 */
+                        (latched & (dir | (pullen & ~pullsel))); /* outputs, and pull-downs -> 0 */
+
+        v = pads ^ inv;
     } else {
         v = s->regs[offset >> 2];
     }
