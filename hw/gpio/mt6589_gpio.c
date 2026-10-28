@@ -127,8 +127,13 @@ static uint64_t mt6589_gpio_read(void *opaque, hwaddr offset, unsigned size)
          * identifies the display by reading a strapping pin, and a floating read of 0 makes it
          * decide the panel does not match.
          */
-        uint32_t pads = (dir & ~(pullen & pullsel)) |          /* inputs with pull-up -> 1 */
-                        (latched & (dir | (pullen & ~pullsel))); /* outputs, and pull-downs -> 0 */
+        /*
+         * Inputs read 1 when pulled up and 0 when pulled down; an input with no pull enabled reads
+         * the output latch, which is the only defined value left. (Making floating inputs read 1
+         * instead was tried as an experiment and changes nothing about the boot.)
+         */
+        uint32_t pads = (dir & ~(pullen & pullsel)) |
+                        (latched & (dir | (pullen & ~pullsel)));
 
         v = pads ^ inv;
     } else {
