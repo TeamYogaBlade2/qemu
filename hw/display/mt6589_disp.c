@@ -1092,10 +1092,24 @@ static uint64_t mt6589_disp_read(void *opaque, hwaddr offset, unsigned size)
  * line is (status & enable) as everywhere else. A driver that asked for an event gets one; nothing
  * is invented about which bit means what.
  */
+/* OVL keeps its interrupt pair two registers earlier: INTEN 0x04, INTSTA 0x08. */
+#define OVL_INTEN_REG   0x0004
+#define OVL_INTSTA_REG  0x0008
+
+static uint32_t mt6589_disp_int_en_reg(const Mt6589DispBlockState *s)
+{
+    return (s->desc->base == 0x14003000) ? OVL_INTEN_REG : 0x0008;
+}
+
+static uint32_t mt6589_disp_int_sta_reg(const Mt6589DispBlockState *s)
+{
+    return (s->desc->base == 0x14003000) ? OVL_INTSTA_REG : 0x000c;
+}
+
 static void mt6589_disp_panel_irq(Mt6589DispBlockState *s)
 {
-    uint32_t en = s->regs[0x0008 >> 2];
-    uint32_t sta = s->regs[0x000c >> 2];
+    uint32_t en = s->regs[mt6589_disp_int_en_reg(s) >> 2];
+    uint32_t sta = s->regs[mt6589_disp_int_sta_reg(s) >> 2];
 
     if (s->desc->has_irq) {
         qemu_set_irq(s->irq, (en & sta) != 0);
@@ -1105,13 +1119,13 @@ static void mt6589_disp_panel_irq(Mt6589DispBlockState *s)
 static void mt6589_disp_panel_tick(void *opaque)
 {
     Mt6589DispBlockState *s = opaque;
-    uint32_t en = s->regs[0x0008 >> 2];
+    uint32_t en = s->regs[mt6589_disp_int_en_reg(s) >> 2];
 
     if (!en) {
         return;                 /* nothing enabled: stop until the guest asks again */
     }
     s->panel_count++;
-    s->regs[0x000c >> 2] |= en;
+    s->regs[mt6589_disp_int_sta_reg(s) >> 2] |= en;
     mt6589_disp_panel_irq(s);
     timer_mod(&s->panel_timer,
               qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + OVL_FRAME_NS);
@@ -1119,7 +1133,7 @@ static void mt6589_disp_panel_tick(void *opaque)
 
 static void mt6589_disp_panel_kick(Mt6589DispBlockState *s)
 {
-    if (!s->desc->has_irq || !s->regs[0x0008 >> 2]) {
+    if (!s->desc->has_irq || !s->regs[mt6589_disp_int_en_reg(s) >> 2]) {
         return;
     }
     if (!timer_pending(&s->panel_timer)) {
@@ -1321,6 +1335,15 @@ static void mt6589_disp_write(void *opaque, hwaddr offset, uint64_t value,
     if (s->desc->base == 0x14003000) {
         mt6589_ovl_kick(s);
     }
+    /*
+     * OVL: the kernel's mtkfb_probe waits (prepare_to_wait/schedule_timeout, no timeout visible)
+     * for the register-update event that the display interrupt handler signals, and the handler for
+     * the overlay is the one that runs it - measured in the binary's callee list. So the overlay's
+     * events are raised once per frame, the same way as the panel's.
+     */
+    if (s->desc->base == 0x14003000 && offset == OVL_INTEN_REG) {
+        mt6589_disp_panel_kick(s);
+    }
     /* DSI/DPI: an enable written here starts their per-frame events. */
     if (s->desc->base == 0x1400d000 || s->desc->base == 0x1400e000) {
         if (offset == 0x0008) {
@@ -1373,7 +1396,8 @@ static void mt6589_disp_realize(DeviceState *dev, Error **errp)
         timer_init_ns(&s->vsync_timer, QEMU_CLOCK_VIRTUAL,
                       mt6589_disp_mutex_vsync, s);
     }
-    if (s->desc->base == 0x1400d000 || s->desc->base == 0x1400e000) {
+    if (s->desc->base == 0x1400d000 || s->desc->base == 0x1400e000 ||
+        s->desc->base == 0x14003000) {
         timer_init_ns(&s->panel_timer, QEMU_CLOCK_VIRTUAL,
                       mt6589_disp_panel_tick, s);
     }
