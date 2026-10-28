@@ -23,6 +23,7 @@
 #include "hw/intc/arm_gic.h"
 #include "hw/arm/mt6589-regs/mt6589-apxgpt-regs.h"
 #include "hw/sd/mt6589_msdc.h"
+#include "hw/i2c/mt6589_i2c.h"
 #include "hw/misc/mt6589_dramc.h"
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
@@ -186,6 +187,13 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_UART2_BASE       0x11008000
 #define MT6589_UART3_BASE       0x11009000
 #define MT6589_I2C0_BASE        0x1100D000
+/*
+ * I2C0..I2C6, one 4 KiB page each from 0x1100_d000 (mainline mt6589.dtsi i2c0..i2c6),
+ * with consecutive SPIs 44..50, i.e. GIC lines 76..82.
+ */
+#define MT6589_I2C_BASE(n)      (0x1100D000 + (n) * 0x1000)
+#define MT6589_NUM_I2C          7
+#define MT6589_I2C_IRQ(n)       (76 + (n))
 /*
  * MSDC0..MSDC4, 64 KiB each at 0x1123_0000 + n*0x10000 (datasheet p46). The boot
  * ROM probes all five when it looks for a preloader on a card, so only modelling
@@ -353,6 +361,7 @@ struct Mt6589State {
 
     SerialMM *uart[MT6589_NUM_UARTS];
     Mt6589MsdcState *msdc[MT6589_NUM_MSDC];
+    Mt6589I2CState *i2c[MT6589_NUM_I2C];
     Mt6589NfiState *nfi;
     Mt6589ToprguState *toprgu;
     Mt6589EfuseState *efuse;

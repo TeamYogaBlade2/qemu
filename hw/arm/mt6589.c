@@ -1220,6 +1220,28 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
      * preloader source and polls NFIECC_ENCIDLE bit 0 while doing so, so an
      * absent block stalls the probe instead of letting the ROM move on.
      */
+    /*
+     * I2C0..I2C6. The controller is what lets a transfer finish: the downstream
+     * driver programs address and length, writes START and then sleeps until
+     * I2C_TRANSAC_COMP appears. With nothing behind the registers an I2C client
+     * probe on bus 3 timed out mid-boot - the driver dumped the controller,
+     * reset it, and the boot stopped there. Addresses that have no modelled
+     * device NACK, which is what the bus does when nothing is attached.
+     */
+    for (int i = 0; i < MT6589_NUM_I2C; i++) {
+        char name[8];
+
+        snprintf(name, sizeof(name), "i2c%d", i);
+        s->i2c[i] = MT6589_I2C(object_new(TYPE_MT6589_I2C));
+        object_property_add_child(OBJECT(s), name, OBJECT(s->i2c[i]));
+        object_property_set_uint(OBJECT(s->i2c[i]), "bus", i, &error_fatal);
+        qdev_realize(DEVICE(s->i2c[i]), sysbus_get_default(), &error_fatal);
+        sysbus_mmio_map(SYS_BUS_DEVICE(s->i2c[i]), 0, MT6589_I2C_BASE(i));
+        sysbus_connect_irq(SYS_BUS_DEVICE(s->i2c[i]), 0,
+                           qdev_get_gpio_in(s->gic,
+                                            MT6589_GIC_GPIO(MT6589_I2C_IRQ(i))));
+    }
+
     s->nfi = MT6589_NFI(object_new(TYPE_MT6589_NFI));
     object_property_add_child(OBJECT(s), "nfi", OBJECT(s->nfi));
     qdev_realize(DEVICE(s->nfi), sysbus_get_default(), &error_fatal);
