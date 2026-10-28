@@ -72,6 +72,7 @@
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
+#include "target/arm/cpu.h"
 #include "hw/arm/mt6589-regs/mt6589-pwrap-regs.h"
 
 /* Offset in the wrapper's own window, named as the datasheet names it. */
@@ -328,6 +329,20 @@ static uint32_t mt6589_pwrap_status(Mt6589PwrapState *s)
      * train, and the guest's first act is to wait for both bits. Leaving either 0
      * produces a wait that never ends, not an error message.
      */
+    /*
+     * A wrapper parked in WFVLDCLR because nobody collected the result must not stay there: the
+     * guest's next access polls for an idle wrapper *before* issuing a command, so one abandoned
+     * read wedges every later access. Measured consequence: the battery thread reported
+     * "wait_for_fsm_idle fail" at 7.3 s and its transaction never completed; the wrapper has a
+     * timeout of its own on real hardware, and this is the model's.
+     */
+    if (s->fsm == FSM_WFVLDCLR && ++s->vldclr_polls > 8) {
+        if (mt6589_pwrap_log_enabled()) {
+            fprintf(stderr, "PWRAP: WFVLDCLR abandoned, timing out to idle\n");
+        }
+        s->fsm = FSM_IDLE;
+        s->vldclr_polls = 0;
+    }
     return STA_INIT_DONE | STA_SYNC_IDLE |
            ((s->fsm & 0x7u) << STA_FSM_SHIFT) |
            (s->rdata & STA_RDATA_MASK);
@@ -488,11 +503,28 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
      */
     if (mt6589_pwrap_log_enabled()) {
         fprintf(stderr, "PWRAP W off=%02" HWADDR_PRIx " val=%08" PRIx32
-                " fsm=%u\n", offset, cmd, s->fsm);
+                " fsm=%u pc=%08x\n", offset, cmd, s->fsm,
+                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0);
     }
 
     switch (offset) {
     case R_CMD:
+        /*
+         * A new command supersedes an uncollected result. The guest's protocol is: write the
+         * command, wait for WFVLDCLR, read the data, write VLDCLR. When a read's result is never
+         * collected - a driver that timed out gives up - the wrapper stays parked in WFVLDCLR and
+         * every later wait_for_fsm_idle fails, which is the pair of errors the battery thread
+         * printed ("wait_for_fsm_idle fail", then "pwrap_wacs2 fail") just before the boot went
+         * quiet. Accepting the next command instead of staying parked is what keeps one abandoned
+         * access from wedging the wrapper for every other thread.
+         */
+        if (s->fsm == FSM_WFVLDCLR) {
+            if (mt6589_pwrap_log_enabled()) {
+                fprintf(stderr, "PWRAP: new command while WFVLDCLR, "
+                        "dropping the uncollected result\n");
+            }
+            s->fsm = FSM_IDLE;
+        }
         if (cmd & CMD_ISWRITE) {
             mt6589_pwrap_pmic_write(s, wacs, cmd & CMD_DATA_MASK);
             /*
@@ -509,11 +541,13 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
              */
             s->rdata = mt6589_pwrap_pmic_read(s, wacs);
             s->fsm = FSM_WFVLDCLR;
+            s->vldclr_polls = 0;
         }
         return;
     case R_VLDCLR:
         /* Data collected: back to idle. */
         s->fsm = FSM_IDLE;
+        s->vldclr_polls = 0;
         return;
     case R_DIO_EN:
     case R_ARB_SIDLY:
