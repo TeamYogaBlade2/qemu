@@ -19,6 +19,7 @@ struct Mt6589GpioState {
     uint32_t regs[0x1000 / 4];
     /* Only serve the registers the window documents (see mt6589_gpio1_regs.h). */
     bool strict;
+    char *win;               /* "1" for the second pin window, "" otherwise */
 };
 
 #endif /* HW_GPIO_MT6589_GPIO_H */

@@ -1411,22 +1411,26 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio), 0, MT6589_GPIO_BASE_PHYS);
 
     /*
-     * 0x1020_c000 is deliberately left unmodelled, and that is a measurement rather than a shortcut.
-     * mt6589.dtsi lists it as the pinctrl's second range ("gpio1") and the datasheet extraction has a
-     * page for it, but mapping *anything* there breaks the boot: with the documented 25 registers as
-     * storage the kernel log falls from 3348 lines to 813 and the preloader stops mid-line after
-     * "init eMMC success", and with an empty table - every read zero, every write dropped, i.e. exactly
-     * what the peripheral catch-all does - it is still 819. So the guest depends on reads of that
-     * window returning zero, and neither the DTS entry nor the extracted page describes what is really
-     * there on this part. That is worth chasing in the DTS and the extraction; putting a plausible
-     * block there because the documents mention one is not.
+     * The second pin window, 0x1020_c000. The downstream driver is explicit about why it exists:
+     * "GPIO114~GPIO169 BASE_ADDRESS is different with others" - pins 114..169 are reached through a
+     * second base with the same register layout, so this is a second instance of the same block and
+     * not a copy of the first. It matters here: every pin this board's panel and touch drivers use
+     * (124, 137, 140, 154) is in that range.
      *
-     * The pins this board's display and touch drivers use (124, 137, 140, 154) are all in the first
-     * window: the extraction's register page runs to MODE2E at 0xee0, forty-seven banks of eight, so
-     * 232 pins fit there. The SIM pins are also in the first window, at non-contiguous addresses in a
-     * different format; this model is offset-generic, so it stores them as written and never
-     * reinterprets them as pin configuration.
+     * The extraction's page for the window lists only 25 registers, nine of which also appear in the
+     * first window's page at the same offset; the driver's accesses cover the whole layout at the
+     * second base, so the model serves the whole layout and the overlapping names are a datasheet
+     * artefact rather than a second set of registers.
+     *
+     * The SIM pins are elsewhere again: 44..49 are not in the pin banks at all but in the packed
+     * registers at 0x990 (SIM1) and 0x9b0 (SIM2), four bits per pin from bit 4. Those live in the
+     * first window and are storage in an offset-generic model.
      */
+    s->gpio1 = MT6589_GPIO(object_new(TYPE_MT6589_GPIO));
+    object_property_add_child(OBJECT(s), "gpio1", OBJECT(s->gpio1));
+    object_property_set_str(OBJECT(s->gpio1), "win", "1", &error_fatal);
+    qdev_realize(DEVICE(s->gpio1), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio1), 0, MT6589_GPIO1_BASE_PHYS);
 
     /*
      * EINT. Pin-based peripherals - the PMIC's interrupt output on EINT 3, the touch panel on

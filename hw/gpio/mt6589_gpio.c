@@ -86,12 +86,18 @@ static bool mt6589_gpio_log_enabled(void)
     return enabled;
 }
 
+/*
+ * These registers are not all 32 bits wide: the datasheet gives the pin banks as 16-bit registers and
+ * BIAS_CON2 as an 8-bit one, and drivers do byte and halfword accesses to them. A model that accepts
+ * only 4-byte accesses turns a byte write at 0x921 into a 4-byte write at 0x920 and corrupts the
+ * neighbouring bits, so the lane has to be honoured.
+ */
 static uint64_t mt6589_gpio_read(void *opaque, hwaddr offset, unsigned size)
 {
     Mt6589GpioState *s = MT6589_GPIO(opaque);
     uint32_t v;
 
-    if (offset >= sizeof(s->regs) || !mt6589_gpio_reg_exists(s, offset)) {
+    if ((offset >> 2) >= ARRAY_SIZE(s->regs) || !mt6589_gpio_reg_exists(s, offset & ~3u)) {
         return 0;
     }
     if (offset >= GPIO(GPIO_DIN0) && offset < GPIO(GPIO_DIN0) + 15 * 0x10) {
@@ -103,12 +109,17 @@ static uint64_t mt6589_gpio_read(void *opaque, hwaddr offset, unsigned size)
     } else {
         v = s->regs[offset >> 2];
     }
+    /* Shift the lane down for sub-word reads. */
+    if (size < 4) {
+        v >>= 8 * (offset & 3);
+        v &= (size == 1) ? 0xffu : 0xffffu;
+    }
     if (mt6589_gpio_log_enabled()) {
         /*
          * The guest PC matters more than the value: a driver that polls a pin shows up as the same
          * two registers over and over, and the PC is what turns that into a function name.
          */
-        fprintf(stderr, "GPIO R %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x task=%s\n", offset, v,
+        fprintf(stderr, "GPIO%s R %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x task=%s\n", s->win, offset, v,
                 current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0,
                 current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0,
                 mt6589_guest_task());
@@ -120,11 +131,11 @@ static void mt6589_gpio_write(void *opaque, hwaddr offset, uint64_t value, unsig
 {
     Mt6589GpioState *s = MT6589_GPIO(opaque);
 
-    if (offset >= sizeof(s->regs) || !mt6589_gpio_reg_exists(s, offset)) {
+    if ((offset >> 2) >= ARRAY_SIZE(s->regs) || !mt6589_gpio_reg_exists(s, offset & ~3u)) {
         return;
     }
     if (mt6589_gpio_log_enabled()) {
-        fprintf(stderr, "GPIO W %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x task=%s\n", offset, (uint32_t)value,
+        fprintf(stderr, "GPIO%s W %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x task=%s\n", s->win, offset, (uint32_t)value,
                 current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0,
                 current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0,
                 mt6589_guest_task());
@@ -139,7 +150,7 @@ static const MemoryRegionOps mt6589_gpio_ops = {
     .read = mt6589_gpio_read,
     .write = mt6589_gpio_write,
     .endianness = DEVICE_LITTLE_ENDIAN,
-    .valid = { .min_access_size = 4, .max_access_size = 4 },
+    .valid = { .min_access_size = 1, .max_access_size = 4 },
 };
 
 static void mt6589_gpio_realize(DeviceState *dev, Error **errp)
@@ -155,6 +166,8 @@ static void mt6589_gpio_realize(DeviceState *dev, Error **errp)
 static const Property mt6589_gpio_props[] = {
     /* Second pin window: only the registers its datasheet page lists exist there. */
     DEFINE_PROP_BOOL("strict", Mt6589GpioState, strict, false),
+    /* Label for the trace, so the two windows can be told apart in a log. */
+    DEFINE_PROP_STRING("win", Mt6589GpioState, win),
 };
 
 static void mt6589_gpio_class_init(ObjectClass *klass, const void *data)
