@@ -37,19 +37,29 @@
 #include "hw/arm/mt6589.h"
 #include "hw/core/irq.h"
 #include "system/memory.h"
+#include "hw/arm/mt6589-regs/mt6589-dramc-regs.h"
+
+/* Offset in the controller window, named as the datasheet names it. */
+#define DRAMC(name) (MT6589_DRAMC_##name - MT6589_DRAMC_BASE)
 #include "system/dma.h"
 
 /* Registers with meaning. Everything else is a plain latch. */
-#define DRAMC_CONF1       0x004
-#define DRAMC_SPCMD       0x1e4
-#define DRAMC_R0DELDLY    0x018
-#define DRAMC_PHYCTL1     0x0f0
-#define DRAMC_R0DQSIEN    0x094
+#define DRAMC_CONF1 DRAMC(CONF1)
+#define DRAMC_SPCMD DRAMC(SPCMD)
+#define DRAMC_R0DELDLY DRAMC(R0DELDLY)
+#define DRAMC_PHYCTL1 DRAMC(PHYCTL1)
+#define DRAMC_R0DQSIEN DRAMC(R0DQSIEN)
+/*
+ * These three are not in the datasheet extraction: DRAMC_TESTRPT, DRAMC_SPCMDRESP and
+ * DRAMC_DQSGNWCNT0 come from the preloader's drivers/inc/emi_hw.h, which is the only
+ * place the boot chain's expectations for them are written down. Everything else in
+ * this file is an expression over mt6589-dramc-regs.h.
+ */
 #define DRAMC_TESTRPT     0x3fc
 #define DRAMC_SPCMDRESP   0x3b8
-#define DRAMC_RRRATE_CTL  0x1f4
-#define DRAMC_DQSGCTL     0x124
-#define DRAMC_DQSCTL1     0x0e0
+#define DRAMC_RRRATE_CTL DRAMC(RRRATE_CTL)
+#define DRAMC_DQSGCTL DRAMC(DQSGCTL)
+#define DRAMC_DQSCTL1 DRAMC(DQSCTL1)
 #define DRAMC_DQSGNWCNT0  0x3c0
 
 /*

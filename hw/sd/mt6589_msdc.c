@@ -43,6 +43,10 @@
 #include "system/memory.h"
 #include "system/dma.h"
 #include "target/arm/cpu.h"
+#include "hw/arm/mt6589-regs/mt6589-msdc-regs.h"
+
+/* Offset in the controller window, named as the datasheet names it. */
+#define MSDC(name) (MT6589_MSDC_##name - MT6589_MSDC_BASE)
 
 /* MSDC_CFG */
 #define MSDC_CFG_MODE       (1u << 0)
@@ -86,15 +90,15 @@
 #define MSDC_PAD_CTL0        0x00e0
 #define MSDC_PAD_CTL1        0x00e4
 #define MSDC_PAD_CTL2        0x00e8
-#define MSDC_PAD_TUNE        0x00ec
-#define MSDC_DAT_RDDLY0      0x00f0
-#define MSDC_DAT_RDDLY1      0x00f4
+#define MSDC_PAD_TUNE MSDC(PAD_TUNE)
+#define MSDC_DAT_RDDLY0 MSDC(DAT_RD_DLY0)
+#define MSDC_DAT_RDDLY1 MSDC(DAT_RD_DLY1)
 
 /* DMA registers, from lk/include/platform/msdc.h. */
-#define MSDC_DMA_SA          0x0090
-#define MSDC_DMA_CA          0x0094
-#define MSDC_DMA_CTRL        0x0098
-#define MSDC_DMA_CFG         0x009c
+#define MSDC_DMA_SA MSDC(DMA_SA)
+#define MSDC_DMA_CA MSDC(DMA_CA)
+#define MSDC_DMA_CTRL MSDC(DMA_CTRL)
+#define MSDC_DMA_CFG MSDC(DMA_CFG)
 #define MSDC_DMA_CTRL_START  (1u << 0)
 #define MSDC_DMA_CTRL_STOP   (1u << 1)
 /*
@@ -129,22 +133,22 @@
 #define MSDC_FIFOCS_CLR       (1u << 31)
 
 /* Register offsets */
-#define MSDC_CFG      0x00
-#define MSDC_IOCON    0x04
-#define MSDC_PS       0x08
-#define MSDC_INT      0x0c
-#define MSDC_INTEN    0x10
-#define MSDC_FIFOCS   0x14
-#define MSDC_TXDATA   0x18
-#define MSDC_RXDATA   0x1c
-#define SDC_CFG       0x30
-#define SDC_CMD       0x34
-#define SDC_ARG       0x38
-#define SDC_STS       0x3c
-#define SDC_RESP0     0x40
-#define SDC_RESP1     0x44
-#define SDC_RESP2     0x48
-#define SDC_RESP3     0x4c
+#define MSDC_CFG MSDC(MSDC_CFG)
+#define MSDC_IOCON MSDC(MSDC_IOCON)
+#define MSDC_PS MSDC(MSDC_PS)
+#define MSDC_INT MSDC(MSDC_INT)
+#define MSDC_INTEN MSDC(MSDC_INTEN)
+#define MSDC_FIFOCS MSDC(MSDC_FIFOCS)
+#define MSDC_TXDATA MSDC(MSDC_TXDATA)
+#define MSDC_RXDATA MSDC(MSDC_RXDATA)
+#define SDC_CFG MSDC(SDC_CFG)
+#define SDC_CMD MSDC(SDC_CMD)
+#define SDC_ARG MSDC(SDC_ARG)
+#define SDC_STS MSDC(SDC_STS)
+#define SDC_RESP0 MSDC(SDC_RESP0)
+#define SDC_RESP1 MSDC(SDC_RESP1)
+#define SDC_RESP2 MSDC(SDC_RESP2)
+#define SDC_RESP3 MSDC(SDC_RESP3)
 /*
  * SDC_BLK_NUM is 0x50, not 0x58 - the datasheet puts SDC_BLK_NUM at 0x50,
  * SDC_CSTS at 0x58 and SDC_CSTS_EN at 0x5c. An earlier version of this file had
@@ -167,13 +171,13 @@
 #define SDC_CMD_DTYPE_NONE 0u
 #define SDC_CMD_RW         (1u << 13)
 
-#define SDC_BLK_NUM   0x50
-#define SDC_CSTS      0x58
-#define SDC_CSTS_EN   0x5c
+#define SDC_BLK_NUM MSDC(SDC_BLK_NUM)
+#define SDC_CSTS MSDC(SDC_CSTS)
+#define SDC_CSTS_EN MSDC(SDC_CSTS_EN)
 #define MSDC_BLK_SZ   0x54
-#define EMMC_CFG0     0x70
-#define EMMC_CFG1     0x74
-#define EMMC_STS      0x78
+#define EMMC_CFG0 MSDC(EMMC_CFG0)
+#define EMMC_CFG1 MSDC(EMMC_CFG1)
+#define EMMC_STS MSDC(EMMC_STS)
 
 /*
  * EMMC_CFG0/STS. The boot ROM's last action before halting is to start the eMMC

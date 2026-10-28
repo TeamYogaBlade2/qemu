@@ -71,18 +71,28 @@
 #include "hw/core/irq.h"
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
+#include "hw/arm/mt6589-regs/mt6589-pwrap-regs.h"
+
+/* Offset in the wrapper's own window, named as the datasheet names it. */
+#define PWRAP(name) (MT6589_PWRAP_##name - MT6589_PWRAP_BASE)
 
 /* Register offsets in the wrapper's own window. */
-#define R_WRAP_EN      0x004
-#define R_WRAP_STA     0x03C
-#define R_MAN_EN       0x064
-#define R_MAN_CMD      0x068
-#define R_MAN_RDATA    0x06C
-#define R_CMD          0x0A4
-#define R_STA          0x0A8
-#define R_VLDCLR       0x0AC
+#define R_WRAP_EN PWRAP(WRAP_EN)
+#define R_WRAP_STA PWRAP(WRAP_STA)
+#define R_MAN_EN PWRAP(MAN_EN)
+#define R_MAN_CMD PWRAP(MAN_CMD)
+#define R_MAN_RDATA PWRAP(MAN_RDATA)
+#define R_CMD PWRAP(WACS2_CMD)
+#define R_STA PWRAP(WACS2_RDATA)
+#define R_VLDCLR PWRAP(WACS2_VLDCLR)
 #define R_CIPHER_RDY   0x144
-#define R_SIDLY        0x0B0
+/*
+ * 0xb0 is PWRAP_INT_EN, not SIDLY: the datasheet extract, the preloader's
+ * mt_pmic_wrap_init.h and LK's copy all put SIDLY at 0x00c and INT_EN at 0x0b0. This
+ * model used to call 0xb0 "SIDLY" and answer every read of it with 2, which meant a
+ * guest reading the interrupt-enable register saw a constant instead of what it wrote.
+ */
+#define R_INT_EN PWRAP(INT_EN)
 
 /*
  * Auxiliary registers the preloader's own PWRAP init walks; the boot ROM never
@@ -90,11 +100,11 @@
  * mt_pmic_wrap_init.h. They are plain read/write latches with no protocol
  * behind them, so they are stored and read back rather than modelled.
  */
-#define R_DIO_EN       0x008
-#define R_ARB_SIDLY    0x00C
-#define R_HIPRIO_EN    0x058
-#define R_HARB_STA0    0x05C
-#define R_HARB_STA1    0x060
+#define R_DIO_EN PWRAP(DIO_EN)
+#define R_ARB_SIDLY PWRAP(SIDLY)
+#define R_HIPRIO_EN PWRAP(HIPRIO_ARB_EN)
+#define R_HARB_STA0 PWRAP(HARB_STA0)
+#define R_HARB_STA1 PWRAP(HARB_STA1)
 
 /* Status bits, from GET_INIT_DONE0 / GET_SYNC_IDLE0 / GET_WACS0_FSM. */
 #define STA_INIT_DONE  (1u << 21)
@@ -330,6 +340,7 @@ static uint32_t mt6589_pwrap_status(Mt6589PwrapState *s)
 static uint32_t mt6589_pwrap_aux_get(Mt6589PwrapState *s, hwaddr offset)
 {
     switch (offset) {
+    case R_INT_EN:    return s->aux_int_en;
     case R_DIO_EN:    return s->aux_dio_en;
     case R_ARB_SIDLY: return s->aux_arb_sidly;
     case R_HIPRIO_EN: return s->aux_hiprio_en;
@@ -344,6 +355,7 @@ static void mt6589_pwrap_aux_set(Mt6589PwrapState *s, hwaddr offset,
 {
     switch (offset) {
     case R_DIO_EN:    s->aux_dio_en = value;    break;
+    case R_INT_EN:    s->aux_int_en = value;    break;
     case R_ARB_SIDLY: s->aux_arb_sidly = value; break;
     case R_HIPRIO_EN: s->aux_hiprio_en = value; break;
     case R_HARB_STA0: s->aux_harb_sta0 = value; break;
@@ -441,6 +453,7 @@ static uint64_t mt6589_pwrap_read(void *opaque, hwaddr offset, unsigned size)
     case R_HIPRIO_EN:
     case R_HARB_STA0:
     case R_HARB_STA1:
+    case R_INT_EN:
         return mt6589_pwrap_aux_get(s, offset);
     case R_CIPHER_RDY:
         /*
@@ -449,8 +462,6 @@ static uint64_t mt6589_pwrap_read(void *opaque, hwaddr offset, unsigned size)
          * pwrap_drv_init for ever with no other access to show for it.
          */
         return s->cipher_rdy & 1;
-    case R_SIDLY:
-        return 2;
     case R_MAN_EN:
         return 0;
     case R_MAN_RDATA:
@@ -508,6 +519,7 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
     case R_HIPRIO_EN:
     case R_HARB_STA0:
     case R_HARB_STA1:
+    case R_INT_EN:
         mt6589_pwrap_aux_set(s, offset, cmd);
         return;
     case R_MAN_CMD:
@@ -520,7 +532,6 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
         return;
     case R_WRAP_EN:
     case R_MAN_EN:
-    case R_SIDLY:
         return;
     }
     qemu_log_mask(LOG_UNIMP, "%s: write 0x%" PRIx64 " to unmodelled offset "

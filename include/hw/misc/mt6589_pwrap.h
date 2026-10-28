@@ -28,6 +28,7 @@ struct Mt6589PwrapState {
     uint32_t rdata;
     uint32_t cipher_rdy;
     uint32_t aux_dio_en, aux_arb_sidly, aux_hiprio_en;
+    uint32_t aux_int_en;
     /* How many FQMTR measurements the guest has started. */
     uint32_t fqmtr_n;
     uint32_t fqmtr_started;
