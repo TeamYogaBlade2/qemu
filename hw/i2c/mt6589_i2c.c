@@ -30,6 +30,9 @@
 #include "qemu/log.h"
 #include "qemu/module.h"
 
+/* Defined in hw/arm/mt6589.c; declared here to avoid pulling in the whole SoC header. */
+const char *mt6589_guest_task(void);
+
 /* Offsets relative to the block base, named after the generated header. */
 #define R(name)      (MT6589_I2C_##name - MT6589_I2C_BASE)
 #define RST(name)    (MT6589_I2C_##name##_RESET)
@@ -148,8 +151,9 @@ static void mt6589_i2c_run_transfer(Mt6589I2CState *s)
     s->regs[R(START) >> 2] &= ~START_BIT;
 
     if (mt6589_i2c_log_enabled()) {
-        fprintf(stderr, "I2C%u %s addr=0x%02x len=%u %s\n", s->bus,
-                read ? "read " : "write", addr7, len, acked ? "ack" : "NACK");
+        fprintf(stderr, "I2C%u %s addr=0x%02x len=%u %s task=%s\n", s->bus,
+                read ? "read " : "write", addr7, len, acked ? "ack" : "NACK",
+                mt6589_guest_task());
     }
     mt6589_i2c_update_irq(s);
 }

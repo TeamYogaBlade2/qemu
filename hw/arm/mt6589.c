@@ -1056,6 +1056,55 @@ static void mt6589_init(Object *obj)
  * because there is no MT6320 interrupt register in the model for the handler to acknowledge;
  * dropping it again is what the hardware does once the source has been cleared.
  */
+/*
+ * Name of the task that issued the current MMIO access.
+ *
+ * PC and LR attributes an access to code, which is not enough: inside a driver helper the PC names
+ * the helper, and in an interrupt the LR is the interrupted context. The task is what says who. On
+ * this kernel thread_info sits at the base of the task's kernel stack with task at +12 and comm at
+ * task+0x31c, so the stack pointer of the running context is all it takes.
+ *
+ * Returns "?" when it cannot be determined - a wrong name is worse than none.
+ */
+const char *mt6589_guest_task(void)
+{
+    static char comm[24];
+    CPUState *cs = current_cpu;
+    uint32_t sp, base, task;
+
+    if (!cs || !cpu_env(cs)) {
+        return "?";
+    }
+    sp = cpu_env(cs)->regs[13];
+    base = sp & ~0x1fffu;
+    if (base < 0xc0000000u) {
+        return "?";
+    }
+    if (cpu_memory_rw_debug(cs, base + 12, (uint8_t *)&task, 4, 0) != 0 ||
+        task < 0xc0000000u || task > 0xe0000000u) {
+        return "?";
+    }
+    {
+        uint32_t pid = 0;
+        char name[17];
+
+        if (cpu_memory_rw_debug(cs, task + 0x234, (uint8_t *)&pid, 4, 0) != 0) {
+            return "?";
+        }
+        memset(name, 0, sizeof(name));
+        if (cpu_memory_rw_debug(cs, task + 0x31c, (uint8_t *)name, 16, 0) != 0 ||
+            name[0] < 32) {
+            return "?";
+        }
+        /*
+         * The PID matters: PID 0 (the idle task) and PID 1 (init) are both called "swapper/0" on
+         * this kernel, so a name alone cannot tell which of them issued an access.
+         */
+        snprintf(comm, sizeof(comm), "%u:%s", pid, name);
+    }
+    return comm;
+}
+
 static void mt6589_pmic_pulse_drop(void *opaque)
 {
     Mt6589State *s = opaque;

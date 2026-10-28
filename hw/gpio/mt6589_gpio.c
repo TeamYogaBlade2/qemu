@@ -26,6 +26,7 @@
 #include "qemu/module.h"
 #include "system/memory.h"
 #include "target/arm/cpu.h"
+#include "hw/arm/mt6589.h"
 
 #define GPIO(name) (MT6589_GPIO_##name - MT6589_GPIO_BASE)
 
@@ -63,9 +64,10 @@ static uint64_t mt6589_gpio_read(void *opaque, hwaddr offset, unsigned size)
          * The guest PC matters more than the value: a driver that polls a pin shows up as the same
          * two registers over and over, and the PC is what turns that into a function name.
          */
-        fprintf(stderr, "GPIO R %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x\n", offset, v,
+        fprintf(stderr, "GPIO R %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x task=%s\n", offset, v,
                 current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0,
-                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0);
+                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0,
+                mt6589_guest_task());
     }
     return v;
 }
@@ -78,9 +80,10 @@ static void mt6589_gpio_write(void *opaque, hwaddr offset, uint64_t value, unsig
         return;
     }
     if (mt6589_gpio_log_enabled()) {
-        fprintf(stderr, "GPIO W %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x\n", offset, (uint32_t)value,
+        fprintf(stderr, "GPIO W %03" HWADDR_PRIx " = %08x pc=%08x lr=%08x task=%s\n", offset, (uint32_t)value,
                 current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0,
-                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0);
+                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0,
+                mt6589_guest_task());
     }
     if (offset >= GPIO(GPIO_DIN0) && offset < GPIO(GPIO_DIN0) + 15 * 0x10) {
         return;                 /* read-only */

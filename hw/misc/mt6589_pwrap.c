@@ -73,6 +73,7 @@
 #include "hw/core/qdev-properties.h"
 #include "system/memory.h"
 #include "target/arm/cpu.h"
+#include "hw/arm/mt6589.h"
 #include "hw/arm/mt6589-regs/mt6589-pwrap-regs.h"
 
 /* Offset in the wrapper's own window, named as the datasheet names it. */
@@ -511,9 +512,10 @@ static void mt6589_pwrap_write(void *opaque, hwaddr offset, uint64_t value,
      */
     if (mt6589_pwrap_log_enabled()) {
         fprintf(stderr, "PWRAP W off=%02" HWADDR_PRIx " val=%08" PRIx32
-                " fsm=%u pc=%08x lr=%08x\n", offset, cmd, s->fsm,
+                " fsm=%u pc=%08x lr=%08x task=%s\n", offset, cmd, s->fsm,
                 current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0,
-                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0);
+                current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[14] : 0,
+                mt6589_guest_task());
     }
 
     switch (offset) {

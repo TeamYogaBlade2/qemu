@@ -418,4 +418,7 @@ struct Mt6589State {
 
 void mt6589_eint_pmic_pulse_init(Mt6589State *s);
 
+/* Name of the task issuing the current MMIO access, or "?" (see mt6589.c). */
+const char *mt6589_guest_task(void);
+
 #endif /* HW_ARM_MT6589_H */
