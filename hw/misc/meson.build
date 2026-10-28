@@ -1,3 +1,4 @@
+system_ss.add(when: 'CONFIG_MT6589', if_true: files('mt6589_eint.c'))
 system_ss.add(when: 'CONFIG_MT6589_PWRAP', if_true: files('mt6589_pwrap.c'))
 system_ss.add(when: 'CONFIG_MT6589_DRAMC', if_true: files('mt6589_dramc.c'))
 system_ss.add(when: 'CONFIG_MT6589_EFUSE', if_true: files('mt6589_efuse.c'))

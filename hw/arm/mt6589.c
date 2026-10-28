@@ -1051,6 +1051,36 @@ static void mt6589_init(Object *obj)
                           "mt6589.mcusys", MT6589_MCUSYS_SIZE);
 }
 
+/*
+ * The PMIC interrupt line, pulsed. Raising it and leaving it up turns into an interrupt storm
+ * because there is no MT6320 interrupt register in the model for the handler to acknowledge;
+ * dropping it again is what the hardware does once the source has been cleared.
+ */
+static void mt6589_pmic_pulse_drop(void *opaque)
+{
+    Mt6589State *s = opaque;
+
+    mt6589_eint_set_line(s->eint, MT6589_EINT_PMIC_LINE, false);
+}
+
+static void mt6589_pmic_pulse(void *opaque)
+{
+    Mt6589State *s = opaque;
+
+    int64_t now = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+
+    mt6589_eint_set_line(s->eint, MT6589_EINT_PMIC_LINE, true);
+    timer_mod(s->pmic_pulse_drop, now + 1000000);            /* drop after 1 ms */
+    timer_mod(s->pmic_pulse, now + 100000000);               /* and again in 100 ms */
+}
+
+void mt6589_eint_pmic_pulse_init(Mt6589State *s)
+{
+    s->pmic_pulse = timer_new_ns(QEMU_CLOCK_VIRTUAL, mt6589_pmic_pulse, s);
+    s->pmic_pulse_drop = timer_new_ns(QEMU_CLOCK_VIRTUAL, mt6589_pmic_pulse_drop, s);
+    timer_mod(s->pmic_pulse, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100000000);
+}
+
 static void mt6589_realize(DeviceState *dev, Error **errp)
 {
     Mt6589State *s = MT6589(dev);
@@ -1259,6 +1289,29 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
     object_property_add_child(OBJECT(s), "gpio", OBJECT(s->gpio));
     qdev_realize(DEVICE(s->gpio), sysbus_get_default(), &error_fatal);
     sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio), 0, MT6589_GPIO_BASE_PHYS);
+
+    /*
+     * EINT. Pin-based peripherals - the PMIC's interrupt output on EINT 3, the touch panel on
+     * EINT 5 - reach the GIC through this block and nowhere else, so nothing of the kind can work
+     * without it however complete its own registers are.
+     */
+    s->eint = MT6589_EINT(object_new(TYPE_MT6589_EINT));
+    object_property_add_child(OBJECT(s), "eint", OBJECT(s->eint));
+    qdev_realize(DEVICE(s->eint), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->eint), 0, MT6589_EINT_BASE_PHYS);
+    sysbus_connect_irq(SYS_BUS_DEVICE(s->eint), 0,
+                       qdev_get_gpio_in(s->gic, MT6589_GIC_GPIO(MT6589_EINT_IRQ)));
+
+    /*
+     * The PMIC asserts its interrupt output (GPIO 37 in EINT mode, i.e. EINT 3) when it has
+     * something to report, and drops it when the handler acknowledges the source. The model has no
+     * MT6320 interrupt registers to acknowledge, so holding the line asserted made the handler
+     * refire for ever - measured as 1.35 million wrapper transactions in 45 seconds from the PMIC
+     * thread alone, which then starved everything else of the PMIC lock. A pulse models "the PMIC
+     * had something to report" without claiming to know what: it is raised, and dropped again one
+     * millisecond of guest time later.
+     */
+    mt6589_eint_pmic_pulse_init(s);
 
     s->nfi = MT6589_NFI(object_new(TYPE_MT6589_NFI));
     object_property_add_child(OBJECT(s), "nfi", OBJECT(s->nfi));

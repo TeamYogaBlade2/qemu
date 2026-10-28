@@ -27,6 +27,7 @@
 #include "hw/i2c/mt6589_i2c.h"
 #include "hw/i2c/mt6589_s7300.h"
 #include "hw/gpio/mt6589_gpio.h"
+#include "hw/misc/mt6589_eint.h"
 #include "hw/misc/mt6589_dramc.h"
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
@@ -303,6 +304,14 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 /* CLK field: 3:0 divider, bit 4 source (0 = 13 MHz system, 1 = 32 kHz RTC). */
 /* GPIO controller: pin configuration registers at 0x1000_5000. */
 #define MT6589_GPIO_BASE_PHYS   0x10005000
+/*
+ * EINT controller, from mt6589.dtsi's pinctrl windows (gpio 0x1000_5000, gpio1
+ * 0x1020_c000, eint 0x1000_b000) and "interrupts = <GIC_SPI 116>", i.e. line 148.
+ */
+#define MT6589_EINT_BASE_PHYS   0x1000B000
+#define MT6589_EINT_IRQ         148
+/* The PMIC's interrupt output is GPIO 37 in EINT mode = EINT 3 (cust_eint.h). */
+#define MT6589_EINT_PMIC_LINE   3
 #define MT6589_GPT_CLK_DIV_MASK 0x0fu
 #define MT6589_GPT_CLK_SRC_RTC  (1u << 4)
 /* Compare-match interrupt bit in IRQEN/IRQSTA: one bit per channel. */
@@ -377,6 +386,9 @@ struct Mt6589State {
     Mt6589I2CState *i2c[MT6589_NUM_I2C];
     Mt6589S7300State s7300;
     Mt6589GpioState *gpio;
+    Mt6589EintState *eint;
+    QEMUTimer *pmic_pulse;
+    QEMUTimer *pmic_pulse_drop;
     Mt6589NfiState *nfi;
     Mt6589ToprguState *toprgu;
     Mt6589EfuseState *efuse;
@@ -403,5 +415,7 @@ struct Mt6589State {
     uint32_t sej_data[0x3c];
     MemoryRegion peri_iomem;
 };
+
+void mt6589_eint_pmic_pulse_init(Mt6589State *s);
 
 #endif /* HW_ARM_MT6589_H */
