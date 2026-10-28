@@ -931,6 +931,17 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
      * The read DMA, if the guest is driving that path instead of the overlay. This is
      * what the kernel configures, and its output is the whole frame, so it is drawn last.
      */
+    if (mt6589_disp_log_enabled()) {
+        Mt6589DispBlockState *cfg = s->config;
+
+        fprintf(stderr, "DISP   route: ovl_mout=%08" PRIx32 " color_mout=%08" PRIx32
+                " rdma_en=%u rdma_addr=%08" PRIx32 " rdma_pitch=%u\n",
+                cfg ? cfg->regs[0x0024 >> 2] : 0, cfg ? cfg->regs[0x0028 >> 2] : 0,
+                s->rdma ? (s->rdma->regs[RDMA(DISP_RDMA_GLOBAL_CON) >> 2] & 1u) : 0,
+                s->rdma ? s->rdma->regs[RDMA(DISP_RDMA_MEM_START_ADDR) >> 2] : 0,
+                s->rdma ? s->rdma->regs[RDMA(DISP_RDMA_MEM_SRC_PITCH) >> 2] : 0);
+    }
+
     if (!from_ovl && s->rdma && (s->rdma->regs[RDMA(DISP_RDMA_GLOBAL_CON) >> 2] & 1u)) {
         hwaddr addr = s->rdma->regs[RDMA(DISP_RDMA_MEM_START_ADDR) >> 2];
         uint32_t pitch = s->rdma->regs[RDMA(DISP_RDMA_MEM_SRC_PITCH) >> 2];
@@ -940,7 +951,13 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
         mt6589_disp_render_fb(s->rdma, addr, pitch, size, dst, stride, w, h);
     }
 
-    if (mt6589_disp_log_enabled() && (s->frame_count % 200) == 0) {
+    /*
+     * Frame 1 as well as every two hundredth: the interesting moment is the first frame that has
+     * the guest's picture in it, and waiting for a modulo boundary misses it entirely on a short
+     * run (measured: a twelve-second boot logged nothing at all).
+     */
+    if (mt6589_disp_log_enabled() &&
+        (s->frame_count == 1 || (s->frame_count % 200) == 0)) {
         /*
          * Report the layer that actually carries the picture - the last one with an address -
          * rather than layer 0, which is usually unused and made an earlier trace read as
@@ -959,15 +976,52 @@ static void mt6589_ovl_compose(Mt6589DispBlockState *s)
                 last_pitch = s->regs[OVL_L_PITCH(n) >> 2];
             }
         }
-        for (int y = 0; y < h; y += 16) {
-            for (int x = 0; x < w; x += 16) {
+        static uint32_t last_logged;
+        /*
+         * Sample consecutive pixels, not every sixteenth: a picture that repeats with a
+         * two-pixel period (which is what a sixteen-bit framebuffer read as thirty-two
+         * looks like) aliases to a constant when sampled on a sixteen-pixel grid, so the
+         * hash reported "nothing has changed" for exactly the broken frames this log exists
+         * to catch.
+         */
+        for (int y = 0; y < h; y += 8) {
+            for (int x = 0; x < w; x++) {
                 hash = hash * 31u + dst[(size_t)y * (stride / 4) + x];
             }
         }
+        if (hash == last_logged && s->frame_count != 1)
+            goto after_log;         /* same picture again: nothing new to say */
+        last_logged = hash;
         fprintf(stderr, "DISP frame %u: %dx%d src=%08" PRIx32 " pitch=%u "
                 "route=%s hash=%08" PRIx32 "\n", s->frame_count, w, h, last_addr,
                 last_pitch, from_ovl ? "ovl" : "rdma", hash);
+        for (int n = 0; n < OVL_NUM_LAYERS; n++) {
+            uint32_t a = s->regs[OVL_L_ADDR(n) >> 2];
+
+            if (!a) {
+                continue;
+            }
+            uint32_t pitch = s->regs[OVL_L_PITCH(n) >> 2];
+            uint32_t size = s->regs[OVL_L_SIZE(n) >> 2];
+            uint32_t head[4] = { 0 };
+            unsigned lw = size & 0xffff;
+
+            /*
+             * The first pixels of the source say which format the guest actually wrote:
+             * sixteen-bit samples repeat a short pattern, while a 32-bit framebuffer has
+             * 0xff in every fourth byte.  Without it, "pitch / width" is the only guess at
+             * the format and it cannot be checked against anything.
+             */
+            address_space_read(&address_space_memory, mt6589_disp_m4u(s, a),
+                               MEMTXATTRS_UNSPECIFIED, head, sizeof(head));
+            fprintf(stderr, "DISP   layer %d: addr=%08" PRIx32 " pitch=%u size=%08" PRIx32
+                    " con=%08" PRIx32 " bpp=%u head=%08" PRIx32 " %08" PRIx32
+                    " %08" PRIx32 " %08" PRIx32 "\n", n, a, pitch, size,
+                    s->regs[OVL_L_CON(n) >> 2], lw ? pitch / lw : 0,
+                    head[0], head[1], head[2], head[3]);
+        }
     }
+after_log:
     mt6589_disp_dump(s, surface, w, h);
     qemu_console_update(s->con, 0, 0, w, h);
 }
