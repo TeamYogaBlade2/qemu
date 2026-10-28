@@ -87,6 +87,11 @@ static bool mt6589_gpio_log_enabled(void)
 }
 
 /*
+ * Widths, from the datasheet's register table: the pin banks (DIR, DOUT, DIN, MODE, PULLEN, PULLSEL,
+ * SMT_CON, IES_CON, DINV) are 16-bit - sixteen pins to a register and one bit each - while DRV_CON,
+ * DSEL_CON, MSDC_R and BIAS_CON0 are 32-bit. The model keeps 32 bits per slot and honours byte and
+ * halfword lanes, so a 16-bit register simply has an upper half that stays zero.
+ *
  * These registers are not all 32 bits wide: the datasheet gives the pin banks as 16-bit registers and
  * BIAS_CON2 as an 8-bit one, and drivers do byte and halfword accesses to them. A model that accepts
  * only 4-byte accesses turns a byte write at 0x921 into a 4-byte write at 0x920 and corrupts the
@@ -104,8 +109,15 @@ static uint64_t mt6589_gpio_read(void *opaque, hwaddr offset, unsigned size)
         /*
          * Pin inputs. Nothing is attached to the pads, so the only self-consistent answer is the
          * output latch - and that is also what real hardware reports for a pin the SoC drives.
+         * GPIO_DINVn (0x600 + bank) inverts the value the pin reports, one bit per pin, so it is
+         * applied here rather than stored in the data registers: a driver that sets DINV and reads
+         * DIN back expects the inverted value.
          */
-        v = s->regs[GPIO(GPIO_DOUT0) + (offset - GPIO(GPIO_DIN0)) >> 2];
+        hwaddr bank = offset - GPIO(GPIO_DIN0);
+        uint32_t latched = s->regs[(GPIO(GPIO_DOUT0) + bank) >> 2];
+        uint32_t inv = s->regs[(GPIO(GPIO_DINV0) + bank) >> 2];
+
+        v = latched ^ inv;
     } else {
         v = s->regs[offset >> 2];
     }
