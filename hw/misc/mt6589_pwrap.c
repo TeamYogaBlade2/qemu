@@ -336,6 +336,14 @@ static uint32_t mt6589_pwrap_status(Mt6589PwrapState *s)
      * "wait_for_fsm_idle fail" at 7.3 s and its transaction never completed; the wrapper has a
      * timeout of its own on real hardware, and this is the model's.
      */
+    if (s->fsm != FSM_IDLE && mt6589_pwrap_log_enabled()) {
+        /*
+         * What the driver sees when it is waiting. Only non-idle states are logged: in a stuck boot
+         * the status register is polled continuously, and the interesting part is which state it is
+         * parked in, not the traffic around it.
+         */
+        fprintf(stderr, "PWRAP: status read with fsm=%u (polls=%u)\n", s->fsm, s->vldclr_polls);
+    }
     if (s->fsm == FSM_WFVLDCLR && ++s->vldclr_polls > 8) {
         if (mt6589_pwrap_log_enabled()) {
             fprintf(stderr, "PWRAP: WFVLDCLR abandoned, timing out to idle\n");
