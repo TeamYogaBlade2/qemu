@@ -386,6 +386,7 @@ struct Mt6589State {
     } gpt_chan[MT6589_GPT_NUM_CHANNELS];
 
     SerialMM *uart[MT6589_NUM_UARTS];
+    MemoryRegion uart_lsr[MT6589_NUM_UARTS];
     Mt6589MsdcState *msdc[MT6589_NUM_MSDC];
     Mt6589I2CState *i2c[MT6589_NUM_I2C];
     Mt6589S7300State s7300;

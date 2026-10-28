@@ -1160,6 +1160,37 @@ void mt6589_eint_pmic_pulse_init(Mt6589State *s)
     timer_mod(s->pmic_pulse, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 100000000);
 }
 
+/*
+ * LSR overlay for the UARTs. The 16C550 model behind serial_mm owns the rest of the block; this
+ * responds for register 5 alone so the transmitter always looks ready.
+ */
+static uint64_t mt6589_uart_lsr_read(void *opaque, hwaddr offset, unsigned size)
+{
+    static int logged;
+
+    if (getenv("MT6589_UART_LOG")) {
+        uint32_t pc = current_cpu ? (uint32_t)cpu_env(current_cpu)->regs[15] : 0;
+
+        /* Kernel-side reads only: the preloader's own polling is not the question. */
+        if (pc >= 0xc0008000u && logged < 40) {
+            logged++;
+            fprintf(stderr, "UART LSR read -> 0x60 task=%s pc=%08x\n", mt6589_guest_task(), pc);
+        }
+    }
+    return 0x60;                /* THRE | TEMT: transmit holding and shift registers empty */
+}
+
+static void mt6589_uart_lsr_write(void *opaque, hwaddr offset, uint64_t value, unsigned size)
+{
+}
+
+static const MemoryRegionOps mt6589_uart_lsr_ops = {
+    .read = mt6589_uart_lsr_read,
+    .write = mt6589_uart_lsr_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+    .valid = { .min_access_size = 1, .max_access_size = 4 },
+};
+
 static void mt6589_realize(DeviceState *dev, Error **errp)
 {
     Mt6589State *s = MT6589(dev);
@@ -1295,6 +1326,16 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
          */
         s->uart[i] = serial_mm_init(get_system_memory(), base, 2, irq, 115200,
                                     serial_hd(i), DEVICE_LITTLE_ENDIAN);
+        /*
+         * The console write path polls LSR bit 5 (THRE) at base+0x14 - 16C550 register 5 with a
+         * 4-byte stride, which is where the datasheet puts UARTN_LSR too. Measured: the guest spins
+         * there for ever after a certain line, so the read has to report an idle transmitter.
+         * THRE (0x20) and TEMT (0x40) both set is what "ready to accept a byte" looks like.
+         */
+        memory_region_init_io(&s->uart_lsr[i], OBJECT(s), &mt6589_uart_lsr_ops, NULL,
+                              "mt6589.uart.lsr", 4);
+        memory_region_add_subregion_overlap(get_system_memory(), base + 0x14,
+                                            &s->uart_lsr[i], 1);
     }
 
     /*
