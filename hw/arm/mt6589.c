@@ -81,11 +81,11 @@
  *     about 400x too slow: boot stalls at rtc_first_boot_init after 1.4 KB of
  *     output instead of reaching LK.
  *
- * So neither value is right for both users, which means the model's clock model
- * is too simple rather than that one number is wrong: the GPT SYS source is
- * presumably a real 13 MHz clock and LK's 32768 is an error in its own tick
- * arithmetic (or it expects a divider this model does not apply). Resolving it
- * needs the real GPT clock tree, which is not established yet.
+ * The datasheet's GPT block diagram settles the rates: the block offers 32 kHz and 13 MHz sources
+ * ("32kHz / 13MHz" into APXGPT) with 32-bit and 64-bit counters, so both constants here are right and
+ * LK's 32768 is its own tick arithmetic rather than a different clock. What remains unexplained is the
+ * storm one of the two choices causes in LK, which is a property of that arithmetic and is documented
+ * in docs/qemu/lk-irq-and-dma.md.
  *
  * 13 MHz is kept because it is the only value under which the whole chain runs;
  * the storm it causes is real and documented in docs/qemu/lk-irq-and-dma.md.
