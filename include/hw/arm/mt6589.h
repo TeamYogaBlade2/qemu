@@ -306,6 +306,8 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 /* CLK field: 3:0 divider, bit 4 source (0 = 13 MHz system, 1 = 32 kHz RTC). */
 /* GPIO controller: pin configuration registers at 0x1000_5000. */
 #define MT6589_GPIO_BASE_PHYS   0x10005000
+/* Second pin window; pins 120..231 (mt6589.dtsi: "gpio1", 232 pins in total). */
+#define MT6589_GPIO1_BASE_PHYS  0x1020C000
 /*
  * EINT controller, from mt6589.dtsi's pinctrl windows (gpio 0x1000_5000, gpio1
  * 0x1020_c000, eint 0x1000_b000) and "interrupts = <GIC_SPI 116>", i.e. line 148.
@@ -393,6 +395,7 @@ struct Mt6589State {
     Mt6589PwrapBridgeState *pwrap_bridge;
     Mt6320PmicState *pmic;
     Mt6589GpioState *gpio;
+    Mt6589GpioState *gpio1;
     Mt6589EintState *eint;
     QEMUTimer *pmic_pulse;
     QEMUTimer *pmic_pulse_drop;
