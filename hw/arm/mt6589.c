@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * MediaTek MT6589 SoC
  *
@@ -1241,6 +1242,23 @@ static void mt6589_realize(DeviceState *dev, Error **errp)
                            qdev_get_gpio_in(s->gic,
                                             MT6589_GIC_GPIO(MT6589_I2C_IRQ(i))));
     }
+
+    /*
+     * The touch panel is on I2C6 at address 0x38 (0x70 >> 1, the address the s7300 driver's board
+     * info asks for). It has to answer: the driver's probe reads the RMI4 function descriptors and
+     * fails with -ENODEV when nothing is there, and that failure is where the boot stopped.
+     */
+    mt6589_s7300_attach(s->i2c[MT6589_S7300_BUS], MT6589_S7300_ADDR, &s->s7300);
+
+    /*
+     * GPIO. The touch panel's reset sequence is pin work - EINT pin to EINT mode, reset pin to
+     * output low, delay, output high - and drivers read the pins back. Without a controller those
+     * accesses went to the peripheral catch-all, which drops writes and reads zeroes.
+     */
+    s->gpio = MT6589_GPIO(object_new(TYPE_MT6589_GPIO));
+    object_property_add_child(OBJECT(s), "gpio", OBJECT(s->gpio));
+    qdev_realize(DEVICE(s->gpio), sysbus_get_default(), &error_fatal);
+    sysbus_mmio_map(SYS_BUS_DEVICE(s->gpio), 0, MT6589_GPIO_BASE_PHYS);
 
     s->nfi = MT6589_NFI(object_new(TYPE_MT6589_NFI));
     object_property_add_child(OBJECT(s), "nfi", OBJECT(s->nfi));

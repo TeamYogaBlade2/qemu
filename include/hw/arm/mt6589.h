@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * MediaTek MT6589 SoC
  *
@@ -24,6 +25,8 @@
 #include "hw/arm/mt6589-regs/mt6589-apxgpt-regs.h"
 #include "hw/sd/mt6589_msdc.h"
 #include "hw/i2c/mt6589_i2c.h"
+#include "hw/i2c/mt6589_s7300.h"
+#include "hw/gpio/mt6589_gpio.h"
 #include "hw/misc/mt6589_dramc.h"
 #include "hw/misc/mt6589_nfi.h"
 #include "hw/misc/mt6589_toprgu.h"
@@ -194,6 +197,9 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_I2C_BASE(n)      (0x1100D000 + (n) * 0x1000)
 #define MT6589_NUM_I2C          7
 #define MT6589_I2C_IRQ(n)       (76 + (n))
+/* The S7300 panel answers at 0x70 >> 1 on I2C6. */
+#define MT6589_S7300_BUS        6
+#define MT6589_S7300_ADDR       0x38
 /*
  * MSDC0..MSDC4, 64 KiB each at 0x1123_0000 + n*0x10000 (datasheet p46). The boot
  * ROM probes all five when it looks for a preloader on a card, so only modelling
@@ -295,13 +301,20 @@ OBJECT_DECLARE_SIMPLE_TYPE(Mt6589State, MT6589)
 #define MT6589_GPT_MODE_FREERUN 3
 
 /* CLK field: 3:0 divider, bit 4 source (0 = 13 MHz system, 1 = 32 kHz RTC). */
+/* GPIO controller: pin configuration registers at 0x1000_5000. */
+#define MT6589_GPIO_BASE_PHYS   0x10005000
 #define MT6589_GPT_CLK_DIV_MASK 0x0fu
 #define MT6589_GPT_CLK_SRC_RTC  (1u << 4)
 /* Compare-match interrupt bit in IRQEN/IRQSTA: one bit per channel. */
 #define MT6589_GPT_IRQ_BIT(n)   (1u << (n))
 
 #define MT6589_NUM_UARTS        4
-#define MT6589_NUM_I2C          4
+/*
+ * MT6589_NUM_I2C is defined next to the I2C base addresses above. It used to be defined here as 4
+ * as well, and the later definition won: only I2C0..I2C3 existed, so every access to I2C4..I2C6 -
+ * including the touch panel's, which is on I2C6 - fell through to the peripheral catch-all and read
+ * back zeroes. That looked like a device that was present but silent.
+ */
 
 struct Mt6589State {
     /*< private >*/
@@ -362,6 +375,8 @@ struct Mt6589State {
     SerialMM *uart[MT6589_NUM_UARTS];
     Mt6589MsdcState *msdc[MT6589_NUM_MSDC];
     Mt6589I2CState *i2c[MT6589_NUM_I2C];
+    Mt6589S7300State s7300;
+    Mt6589GpioState *gpio;
     Mt6589NfiState *nfi;
     Mt6589ToprguState *toprgu;
     Mt6589EfuseState *efuse;

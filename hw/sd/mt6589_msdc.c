@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * MediaTek MT6589 MSDC - SD/MMC controller
  *
@@ -57,14 +58,14 @@
 #define MSDC_CFG_BV18SDT    (1u << 5)
 #define MSDC_CFG_BV18PSS    (1u << 6)
 #define MSDC_CFG_CKSTB      (1u << 7)
-#define MSDC_CFG_CKDIV      (0xffu << 8)
-#define MSDC_CFG_CKMOD      (0x3u << 16)
+#define MSDC_CFG_CKDIV      MT6589_MSDC_MSDC_CFG_CCKDIV_MASK
+#define MSDC_CFG_CKMOD      MT6589_MSDC_MSDC_CFG_CCKMD_MASK
 
 /* MSDC_PS */
 #define MSDC_PS_CDEN        (1u << 0)
 #define MSDC_PS_CDSTS       (1u << 1)
-#define MSDC_PS_CDDEBOUNCE  (0xfu << 12)
-#define MSDC_PS_DAT         (0xffu << 16)
+#define MSDC_PS_CDDEBOUNCE  MT6589_MSDC_MSDC_PS_CDDBCE_MASK
+#define MSDC_PS_DAT         MT6589_MSDC_MSDC_PS_DAT_MASK
 #define MSDC_PS_CMD         (1u << 24)
 #define MSDC_PS_WP          (1u << 31)
 
@@ -115,7 +116,6 @@
 #define MSDC_DMA_CFG_STS     (1u << 0)
 
 /* MSDC_FIFOCS */
-#define MSDC_FIFOCS_TXCNT     (0xfu << 0)
 /*
  * FIFOCS field positions are from the downstream preloader's msdc.h, because the
  * datasheet's FIFOCS table lists only FIFOCLR:
